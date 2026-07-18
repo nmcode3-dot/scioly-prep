@@ -1,116 +1,104 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
-import type { BattleStateView } from "@/lib/battle-store";
-import { formatMs } from "@/lib/battle-store";
+import { useRouter } from "next/navigation";
+import {
+  getActiveBattle,
+  judge,
+  formatMs,
+  type ClientBattle,
+  type BattleAnswer,
+  type Judgment,
+} from "@/lib/battle-client";
 import { divisionShort } from "@/lib/ui";
 
 const LETTERS = ["A", "B", "C", "D", "E", "F"];
 
-export default function BattleArenaPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
+export default function BattleArenaPage() {
   const router = useRouter();
-  const search = useSearchParams();
-  const [battleId, setBattleId] = useState("");
-  const [side, setSide] = useState<"home" | "away">("home");
-  const [battle, setBattle] = useState<BattleStateView | null>(null);
+  const [battle, setBattle] = useState<ClientBattle | null>(null);
   const [current, setCurrent] = useState(0);
-  const [locked, setLocked] = useState(false);
+  const [answers, setAnswers] = useState<BattleAnswer[]>([]);
   const [revealed, setRevealed] = useState(false);
   const [elapsed, setElapsed] = useState(0);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const [botAnswered, setBotAnswered] = useState(0);
+  const [done, setDone] = useState<Judgment | null>(null);
+  const [ready, setReady] = useState(false);
+
   const qStartRef = useRef<number>(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const botTimeouts = useRef<ReturnType<typeof setTimeout>[]>([]);
 
+  // Load battle from sessionStorage
   useEffect(() => {
-    params.then((p) => setBattleId(p.id));
-    const s = search.get("side");
-    setSide(s === "away" ? "away" : "home");
-  }, [params, search]);
+    const b = getActiveBattle();
+    if (!b) {
+      router.replace("/battle");
+      return;
+    }
+    setBattle(b);
+    setReady(true);
+  }, [router]);
 
-  // load battle
-  const loadBattle = useCallback(() => {
-    if (!battleId) return;
-    fetch(`/api/battle/${battleId}?side=${side}`)
-      .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
-      .then((d) => setBattle(d))
-      .catch(() => setLoadError("Battle not found or expired."));
-  }, [battleId, side]);
-
+  // Per-question timer (resets only when `current` changes — no polling to reset it)
   useEffect(() => {
-    loadBattle();
-  }, [loadBattle]);
-
-  // Whether a playable battle is loaded. This is a STABLE boolean that doesn't
-  // change on every opponent poll (so the effect below doesn't reset mid-question).
-  const battleReady = Boolean(battle && battle.status !== "finished");
-
-  // Start the per-question timer when the battle loads OR the question advances.
-  // NOTE: deps deliberately EXCLUDE `battle` — otherwise the 2.5s opponent poll
-  // would reset `revealed`/`locked` and wipe your answer feedback, making it
-  // feel like your selection never registered.
-  useEffect(() => {
-    if (!battleReady) return;
+    if (!battle) return;
+    if (current >= battle.questions.length) return;
     qStartRef.current = Date.now();
     setElapsed(0);
-    setLocked(false);
     setRevealed(false);
+
     if (timerRef.current) clearInterval(timerRef.current);
     timerRef.current = setInterval(() => {
       setElapsed(Date.now() - qStartRef.current);
     }, 100);
+
+    // Schedule the bot "answering" this question after its simulated time.
+    const botAns = battle.away.answers[current];
+    if (botAns) {
+      const t = setTimeout(() => {
+        setBotAnswered((c) => Math.min(battle.questions.length, c + 1));
+      }, botAns.timeMs);
+      botTimeouts.current.push(t);
+    }
+
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [current, battleReady]);
+  }, [current, battle]);
 
-  // poll for opponent progress (matters for human opponents) + final state
+  // Cleanup bot timers on unmount
   useEffect(() => {
-    if (!battleId || !battle) return;
-    if (battle.status === "finished") return;
-    const poll = setInterval(loadBattle, 2500);
-    return () => clearInterval(poll);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [battleId, battle?.status, loadBattle]);
+    return () => {
+      botTimeouts.current.forEach(clearTimeout);
+    };
+  }, []);
 
-  const answer = async (selectedIndex: number) => {
-    if (!battle || locked || revealed) return;
+  const answer = (selectedIndex: number) => {
+    if (!battle || revealed) return;
     const timeMs = Date.now() - qStartRef.current;
-    setLocked(true);
     if (timerRef.current) clearInterval(timerRef.current);
-    try {
-      const res = await fetch(`/api/battle/${battleId}/answer`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ side, selectedIndex, timeMs }),
-      });
-      const data = await res.json();
-      if (data.view) setBattle(data.view);
-    } catch {
-      /* ignore */
-    }
+    const newAnswers = [...answers, { selectedIndex, timeMs }];
+    setAnswers(newAnswers);
     setRevealed(true);
   };
 
-  if (loadError) {
-    return (
-      <div className="mx-auto max-w-xl px-4 py-24 text-center">
-        <p className="text-4xl">🤖</p>
-        <h1 className="mt-4 font-display text-2xl font-bold text-slate-900">{loadError}</h1>
-        <Link href="/battle" className="mt-6 inline-block rounded-xl bg-violet-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-violet-700">
-          Back to battle
-        </Link>
-      </div>
-    );
-  }
+  const next = () => {
+    if (!battle) return;
+    // Ensure bot count is at least current+1 before advancing feel
+    if (current + 1 >= battle.questions.length) {
+      // finish
+      const j = judge(answers, battle);
+      setBotAnswered(battle.questions.length);
+      setDone(j);
+    } else {
+      setCurrent((c) => c + 1);
+    }
+  };
 
-  if (!battle) {
+  if (!ready || !battle) {
     return (
       <div className="py-24 text-center">
         <span className="mx-auto mb-3 block h-8 w-8 animate-spin rounded-full border-4 border-violet-200 border-t-violet-600" />
@@ -120,10 +108,9 @@ export default function BattleArenaPage({
   }
 
   // ── RESULTS ──
-  if (battle.status === "finished") {
-    const j = battle.judgment;
-    const won = j?.winner === side;
-    const tie = j?.winner === "tie";
+  if (done) {
+    const won = done.winner === "home";
+    const tie = done.winner === "tie";
     return (
       <div className="mx-auto max-w-2xl px-4 py-12 sm:px-6">
         <div className="rounded-3xl border border-slate-200 bg-white p-8 text-center shadow-sm">
@@ -131,23 +118,25 @@ export default function BattleArenaPage({
           <h1 className="mt-3 font-display text-3xl font-bold text-slate-900">
             {tie ? "It's a tie!" : won ? "Victory!" : "Good battle!"}
           </h1>
-          <p className="mt-1 text-slate-500">{battle.eventName} · {divisionShort(battle.division)}</p>
+          <p className="mt-1 text-slate-500">
+            {battle.eventName} · {divisionShort(battle.division)}
+          </p>
 
           <div className="mt-6 grid grid-cols-2 gap-3">
             <PlayerCard
-              emoji={battle.me.emoji}
-              name={battle.me.nickname}
-              correct={j ? (side === "home" ? j.homeCorrect : j.awayCorrect) : 0}
-              time={j ? (side === "home" ? j.homeTime : j.awayTime) : 0}
-              total={battle.total}
+              emoji={battle.home.emoji}
+              name={battle.home.nickname}
+              correct={done.homeCorrect}
+              time={done.homeTime}
+              total={battle.questions.length}
               highlight={won}
             />
             <PlayerCard
-              emoji={battle.opp.emoji}
-              name={battle.opp.nickname}
-              correct={j ? (side === "home" ? j.awayCorrect : j.homeCorrect) : 0}
-              time={j ? (side === "home" ? j.awayTime : j.homeTime) : 0}
-              total={battle.total}
+              emoji={battle.away.emoji}
+              name={battle.away.nickname}
+              correct={done.awayCorrect}
+              time={done.awayTime}
+              total={battle.questions.length}
               highlight={!won && !tie}
             />
           </div>
@@ -157,10 +146,16 @@ export default function BattleArenaPage({
           </p>
 
           <div className="mt-6 flex flex-wrap justify-center gap-3">
-            <Link href="/battle/lobby" className="rounded-xl bg-violet-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-violet-700">
+            <Link
+              href="/battle/lobby"
+              className="rounded-xl bg-violet-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-violet-700"
+            >
               ⚔️ Battle again
             </Link>
-            <Link href="/battle" className="rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+            <Link
+              href="/battle"
+              className="rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+            >
               New event
             </Link>
           </div>
@@ -170,18 +165,30 @@ export default function BattleArenaPage({
   }
 
   const q = battle.questions[current];
-  const myAnswer = battle.me.answers[current];
+  const myAnswer = answers[current];
+  const oppAnswer = battle.away.answers[current];
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-8 sm:px-6">
       {/* Scoreboard */}
       <div className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-        <ScoreSide emoji={battle.me.emoji} name="You" answered={battle.me.answeredCount} total={battle.total} you />
+        <ScoreSide
+          emoji={battle.home.emoji}
+          name="You"
+          answered={answers.length}
+          total={battle.questions.length}
+          you
+        />
         <div className="text-center">
           <p className="font-display text-sm font-bold text-slate-400">VS</p>
           <p className="text-[11px] text-slate-400">{formatMs(elapsed)}</p>
         </div>
-        <ScoreSide emoji={battle.opp.emoji} name={battle.opp.nickname} answered={battle.opp.answeredCount} total={battle.total} />
+        <ScoreSide
+          emoji={battle.away.emoji}
+          name={battle.away.nickname}
+          answered={botAnswered}
+          total={battle.questions.length}
+        />
       </div>
 
       {/* progress dots */}
@@ -204,7 +211,7 @@ export default function BattleArenaPage({
               {q.topic}
             </span>
             <span className="text-xs font-semibold text-slate-400">
-              Q{current + 1} / {battle.total}
+              Q{current + 1} / {battle.questions.length}
             </span>
           </div>
           <p className="mt-3 text-lg font-medium leading-relaxed text-slate-900">{q.prompt}</p>
@@ -242,16 +249,18 @@ export default function BattleArenaPage({
           {revealed && (
             <div className="mt-4 animate-float-up space-y-3">
               <div className="rounded-xl bg-slate-50 p-3.5">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Explanation</p>
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                  Explanation
+                </p>
                 <p className="mt-1 text-sm leading-relaxed text-slate-700">{q.explanation}</p>
               </div>
-              {q.opp && (
+              {oppAnswer && (
                 <div className="flex items-center gap-2 rounded-xl border border-violet-100 bg-violet-50/60 px-3.5 py-2.5 text-sm">
-                  <span className="text-lg">{battle.opp.emoji}</span>
-                  <span className="font-medium text-slate-700">{battle.opp.nickname}</span>
+                  <span className="text-lg">{battle.away.emoji}</span>
+                  <span className="font-medium text-slate-700">{battle.away.nickname}</span>
                   <span className="text-slate-500">
-                    answered in <b>{formatMs(q.opp.timeMs)}</b> —{" "}
-                    {q.opp.selectedIndex === q.correctIndex ? (
+                    answered in <b>{formatMs(oppAnswer.timeMs)}</b> —{" "}
+                    {oppAnswer.selectedIndex === q.correctIndex ? (
                       <span className="font-semibold text-emerald-600">correct ✓</span>
                     ) : (
                       <span className="font-semibold text-rose-600">wrong ✕</span>
@@ -261,10 +270,10 @@ export default function BattleArenaPage({
               )}
               <button
                 type="button"
-                onClick={() => setCurrent((c) => c + 1)}
+                onClick={next}
                 className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white hover:bg-slate-800"
               >
-                {current + 1 >= battle.total ? "See results →" : "Next question →"}
+                {current + 1 >= battle.questions.length ? "See results →" : "Next question →"}
               </button>
             </div>
           )}

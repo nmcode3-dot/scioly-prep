@@ -3,114 +3,107 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import type { BotDef, LobbyEntry } from "@/lib/battle-store";
+import {
+  BOT_ROSTER,
+  BATTLE_QUESTIONS,
+  BATTLE_SEASON,
+  simulateBot,
+  skillLabel,
+  setActiveBattle,
+  type ClientBattle,
+} from "@/lib/battle-client";
 
 export default function BattleLobbyPage() {
   const router = useRouter();
+  const [busy, setBusy] = useState(false);
+  const [busyName, setBusyName] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [ready, setReady] = useState(false);
   const [nickname, setNickname] = useState("");
   const [emoji, setEmoji] = useState("🦊");
   const [eventName, setEventName] = useState("");
   const [division, setDivision] = useState<"B" | "C">("C");
-  const [lobbyId, setLobbyId] = useState("");
-  const [bots, setBots] = useState<BotDef[]>([]);
-  const [players, setPlayers] = useState<LobbyEntry[]>([]);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [ready, setReady] = useState(false);
 
-  // load saved setup
+  // load saved setup (client-only; sessionStorage isn't available during SSR)
   useEffect(() => {
     const nick = sessionStorage.getItem("scioly.battle.nick");
     const em = sessionStorage.getItem("scioly.battle.emoji");
     const div = sessionStorage.getItem("scioly.battle.division");
     const ev = sessionStorage.getItem("scioly.battle.event");
-    if (!nick || !ev) {
+    setNickname(nick ?? "");
+    setEmoji(em ?? "🦊");
+    setDivision((div as "B" | "C") ?? "C");
+    setEventName(ev ?? "");
+    setReady(true);
+  }, []);
+
+  const challenge = async (bot: (typeof BOT_ROSTER)[number]) => {
+    if (!nickname || !eventName) {
       router.replace("/battle");
       return;
     }
-    setNickname(nick);
-    setEmoji(em ?? "🦊");
-    setDivision((div as "B" | "C") ?? "C");
-    setEventName(ev);
-    setReady(true);
-  }, [router]);
-
-  // join lobby + poll opponents + check for being challenged
-  useEffect(() => {
-    if (!ready) return;
-    let myLobbyId = "";
-
-    fetch("/api/battle/lobby", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ nickname, emoji, event: eventName, division }),
-    })
-      .then((r) => r.json())
-      .then((d) => {
-        myLobbyId = d.lobbyId;
-        setLobbyId(d.lobbyId);
-      })
-      .catch(() => {});
-
-    const poll = setInterval(() => {
-      const qs = new URLSearchParams({ event: eventName, division, lobbyId: myLobbyId });
-      fetch(`/api/battle/lobby?${qs.toString()}`)
-        .then((r) => r.json())
-        .then((d) => {
-          setBots(d.bots ?? []);
-          setPlayers(d.players ?? []);
-          if (d.challengedBattleId) {
-            clearInterval(poll);
-            router.push(`/battle/arena/${d.challengedBattleId}?side=away`);
-          }
-        })
-        .catch(() => {});
-    }, 2500);
-    // initial fetch
-    fetch(`/api/battle/lobby?event=${encodeURIComponent(eventName)}&division=${division}`)
-      .then((r) => r.json())
-      .then((d) => {
-        setBots(d.bots ?? []);
-        setPlayers(d.players ?? []);
-      })
-      .catch(() => {});
-
-    return () => {
-      clearInterval(poll);
-      if (myLobbyId) {
-        fetch(`/api/battle/lobby?lobbyId=${myLobbyId}`, { method: "DELETE" }).catch(() => {});
-      }
-    };
-  }, [ready, nickname, emoji, eventName, division, router]);
-
-  const challenge = async (opp: { nickname: string; emoji: string; isBot: boolean; skill: number }) => {
     setBusy(true);
+    setBusyName(bot.nickname);
     setError(null);
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 90000);
+
     try {
-      const res = await fetch("/api/battle/create", {
+      // Generate current-season questions (stateless server call).
+      const res = await fetch("/api/ai-quiz", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          myNickname: nickname,
-          myEmoji: emoji,
-          opponent: opp,
           eventName,
           division,
+          season: BATTLE_SEASON,
+          difficulty: "medium",
+          count: BATTLE_QUESTIONS,
         }),
+        signal: controller.signal,
       });
       const data = await res.json();
-      if (!res.ok || !data.battleId) {
-        setError(data.error ?? "Couldn't start the battle.");
-        setBusy(false);
-        return;
+      if (!res.ok || !Array.isArray(data.questions) || data.questions.length === 0) {
+        throw new Error(data.error || "Couldn't generate battle questions. Try again.");
       }
-      if (lobbyId) {
-        fetch(`/api/battle/lobby?lobbyId=${lobbyId}`, { method: "DELETE" }).catch(() => {});
-      }
-      router.push(`/battle/arena/${data.battleId}?side=home`);
-    } catch {
-      setError("Network error. Try again.");
+
+      const questions = data.questions.map((q: ClientBattle["questions"][number]) => ({
+        prompt: q.prompt,
+        options: q.options,
+        correctIndex: q.correctIndex,
+        explanation: q.explanation,
+        topic: q.topic,
+      }));
+
+      const battle: ClientBattle = {
+        eventName,
+        division,
+        season: BATTLE_SEASON,
+        questions,
+        home: { nickname, emoji },
+        away: {
+          nickname: bot.nickname,
+          emoji: bot.emoji,
+          isBot: true,
+          skill: bot.skill,
+          answers: simulateBot(questions, bot.skill),
+        },
+      };
+      setActiveBattle(battle);
+      router.push("/battle/arena");
+    } catch (err) {
       setBusy(false);
+      setBusyName("");
+      if (err instanceof Error && err.name === "AbortError") {
+        setError("The AI took too long. Try again.");
+      } else if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError("Network error. Try again.");
+      }
+    } finally {
+      clearTimeout(timer);
     }
   };
 
@@ -126,10 +119,10 @@ export default function BattleLobbyPage() {
             ⚔️ Battle Lobby
           </span>
           <h1 className="mt-2 font-display text-2xl font-bold text-slate-900">
-            {emoji} {nickname}
+            {emoji} {nickname || "Player"}
           </h1>
           <p className="text-sm text-slate-500">
-            {eventName} · Division {division} · 2025–26 rules
+            {eventName || "Event"} · Division {division} · 2025–26 rules
           </p>
         </div>
         <Link
@@ -144,16 +137,17 @@ export default function BattleLobbyPage() {
         Choose your opponent
       </p>
       <p className="mt-1 text-xs text-slate-400">
-        Practicing solo? Challenge a simulated opponent — they answer in real time with realistic speed and skill.
+        Each opponent races you in real time — they answer with realistic speed and
+        accuracy based on their skill. Most correct wins; ties broken by speed.
       </p>
 
       <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-        {bots.map((b) => (
+        {BOT_ROSTER.map((b) => (
           <button
             key={b.nickname}
             type="button"
             disabled={busy}
-            onClick={() => challenge({ nickname: b.nickname, emoji: b.emoji, isBot: true, skill: b.skill })}
+            onClick={() => challenge(b)}
             className="group flex items-center gap-3 rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-violet-300 hover:shadow-md disabled:opacity-60"
           >
             <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-50 text-2xl ring-1 ring-slate-100">
@@ -176,38 +170,6 @@ export default function BattleLobbyPage() {
         ))}
       </div>
 
-      {players.length > 0 && (
-        <>
-          <p className="mt-8 text-sm font-semibold uppercase tracking-wide text-slate-500">
-            Online players in this event
-          </p>
-          <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-            {players.map((p) => (
-              <button
-                key={p.lobbyId}
-                type="button"
-                disabled={busy}
-                onClick={() =>
-                  challenge({ nickname: p.nickname, emoji: p.emoji, isBot: false, skill: 0.6 })
-                }
-                className="flex items-center gap-3 rounded-2xl border border-emerald-200 bg-emerald-50/50 p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-emerald-400 disabled:opacity-60"
-              >
-                <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-white text-2xl ring-1 ring-emerald-100">
-                  {p.emoji}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate font-semibold text-slate-800">{p.nickname}</p>
-                  <p className="flex items-center gap-1 text-xs text-emerald-600">
-                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> Online now
-                  </p>
-                </div>
-                <span className="text-sm font-bold text-emerald-600">⚔️</span>
-              </button>
-            ))}
-          </div>
-        </>
-      )}
-
       {error && (
         <p className="mt-6 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700 ring-1 ring-rose-200">
           {error}
@@ -218,7 +180,9 @@ export default function BattleLobbyPage() {
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm">
           <div className="rounded-2xl bg-white p-6 text-center shadow-xl">
             <span className="mx-auto mb-3 block h-8 w-8 animate-spin rounded-full border-4 border-violet-200 border-t-violet-600" />
-            <p className="text-sm font-semibold text-slate-700">Preparing battle…</p>
+            <p className="text-sm font-semibold text-slate-700">
+              Challenging {busyName}…
+            </p>
             <p className="text-xs text-slate-400">Generating 2025–26 questions</p>
           </div>
         </div>
@@ -236,11 +200,4 @@ function SkillBar({ skill }: { skill: number }) {
       />
     </div>
   );
-}
-
-function skillLabel(s: number): string {
-  if (s >= 0.8) return "Elite";
-  if (s >= 0.65) return "Strong";
-  if (s >= 0.5) return "Solid";
-  return "Rookie";
 }
