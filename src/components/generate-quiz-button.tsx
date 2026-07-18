@@ -18,11 +18,14 @@ const DIFFICULTIES = [
 export function GenerateQuizButton({
   eventName,
   division,
+  season: defaultSeason = "2026",
 }: {
   eventName: string;
   division: string;
+  season?: string;
 }) {
   const router = useRouter();
+  const [season, setSeason] = useState(defaultSeason);
   const [difficulty, setDifficulty] = useState("medium");
   const [count, setCount] = useState(5);
   const [topic, setTopic] = useState("");
@@ -42,6 +45,7 @@ export function GenerateQuizButton({
         body: JSON.stringify({
           eventName,
           division,
+          season,
           difficulty,
           count,
           topic: topic.trim() || undefined,
@@ -118,6 +122,27 @@ export function GenerateQuizButton({
           {error}
         </p>
       )}
+
+      <div className="mt-4">
+        <label className="block">
+          <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Season (rules focus)
+          </span>
+          <select
+            value={season}
+            onChange={(e) => setSeason(e.target.value)}
+            className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-100"
+          >
+            <option value="2026">2025–26 (current rules)</option>
+            <option value="2027">2027 (next-year rules)</option>
+            <option value="2025">2024–25 (previous rules)</option>
+          </select>
+        </label>
+        <p className="mt-1.5 text-[11px] leading-snug text-slate-400">
+          Rotation events (Anatomy, Dynamic Planet, Astronomy…) change topics
+          each season — this sets the correct rules focus.
+        </p>
+      </div>
 
       <button
         type="button"

@@ -44,6 +44,11 @@ export async function POST(req: NextRequest) {
     ? Math.max(1, Math.min(15, Math.round(countRaw)))
     : 5;
   const topic = typeof body.topic === "string" ? body.topic.trim() : undefined;
+  const seasonRaw = typeof body.season === "string" ? body.season : "2026";
+  const season =
+    seasonRaw === "2025" || seasonRaw === "2026" || seasonRaw === "2027"
+      ? seasonRaw
+      : "2026";
 
   if (!eventName) {
     return Response.json({ error: "eventName is required." }, { status: 400 });
@@ -51,7 +56,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const { questions, model } = await generateQuestions(
-      { eventName, division, difficulty, count, topic },
+      { eventName, division, difficulty, count, season, topic },
       overrides,
     );
     return Response.json({

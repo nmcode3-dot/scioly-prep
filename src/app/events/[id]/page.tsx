@@ -125,7 +125,11 @@ export default async function EventDetailPage({
 
         {/* Sidebar */}
         <div className="space-y-4 lg:sticky lg:top-20 lg:self-start">
-          <GenerateQuizButton eventName={event.name} division={event.division} />
+          <GenerateQuizButton
+            eventName={event.name}
+            division={event.division}
+            season={event.season}
+          />
 
           {/* Curated bank as a secondary option */}
           {event.questionCount > 0 && (

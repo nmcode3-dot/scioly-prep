@@ -28,6 +28,7 @@ export function QuizBuilder({ options }: { options: BuilderOption[] }) {
   const [difficulty, setDifficulty] = useState("medium");
   const [count, setCount] = useState(5);
   const [topic, setTopic] = useState("");
+  const [season, setSeason] = useState("2026");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -74,6 +75,7 @@ export function QuizBuilder({ options }: { options: BuilderOption[] }) {
         body: JSON.stringify({
           eventName: selectedOption.eventName,
           division: selectedOption.division,
+          season,
           difficulty,
           count,
           topic: topic.trim() || undefined,
@@ -241,6 +243,21 @@ export function QuizBuilder({ options }: { options: BuilderOption[] }) {
           )}
 
           <div className="mt-4 space-y-3">
+            <label className="block">
+              <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Season (rules focus)
+              </span>
+              <select
+                className={selectClass}
+                value={season}
+                onChange={(e) => setSeason(e.target.value)}
+                disabled={!selectedOption}
+              >
+                <option value="2026">2025–26 (current rules)</option>
+                <option value="2027">2027 (next-year rules)</option>
+                <option value="2025">2024–25 (previous rules)</option>
+              </select>
+            </label>
             <div className="grid grid-cols-2 gap-3">
               <label className="block">
                 <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500">

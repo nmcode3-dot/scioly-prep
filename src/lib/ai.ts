@@ -1,4 +1,5 @@
 import { EVENT_INFO } from "@/lib/events-data";
+import { buildFocusDirective } from "@/lib/rules-focus";
 
 /**
  * AI quiz generation via an OpenAI-compatible endpoint.
@@ -115,24 +116,35 @@ function buildSystemPrompt(opts: {
   division: string;
   difficulty: string;
   count: number;
+  season?: string;
   topic?: string;
 }): string {
   const info = EVENT_INFO[opts.eventName];
-  const focus = opts.topic?.trim()
-    ? `Focus the questions specifically on this sub-topic: "${opts.topic.trim()}".`
-    : "Cover the breadth of the event's topics.";
+  const season = opts.season || "2026";
+  // Season-accurate rules focus — ensures questions match the official rules
+  // for rotation events (Anatomy, Dynamic Planet, Astronomy, etc.).
+  const { directive: focusDirective } = buildFocusDirective(
+    season,
+    opts.eventName,
+    opts.topic,
+  );
 
-  return `You are an expert Science Olympiad test writer who writes rigorous, fair multiple-choice questions in the style of official invitational exams and rules manuals.
+  return `You are an expert Science Olympiad test writer who writes rigorous, fair multiple-choice questions in the style of official invitational exams and the ${season} season rules manual.
 
 You are writing for the "${opts.eventName}" event (Division ${opts.division}).
 ${info ? `Event context: ${info.long}` : ""}
+
+━━━ RULES FOCUS (follow this precisely) ━━━
+${focusDirective}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 Difficulty target: ${DIFFICULTY_GUIDE[opts.difficulty] ?? DIFFICULTY_GUIDE.any}.
-${focus}
 
 Rules for every question:
 - Exactly 4 answer options (A–D), all plausible and unambiguous.
 - One clearly correct answer; the other three are plausible distractors.
 - The correct answer must be factually correct. Do not invent false "facts".
+- Every question MUST stay within the rules focus above for the ${season} season. Do not ask about topics outside the season's focus.
 - Include a concise explanation (1–3 sentences) stating WHY the correct option is right (and briefly why key distractors are wrong where useful).
 - Avoid "all of the above" / "none of the above".
 - Questions should be self-contained (assume no images).
@@ -223,6 +235,7 @@ export async function generateQuestions(
     division: string;
     difficulty: string;
     count: number;
+    season?: string;
     topic?: string;
   },
   overrides?: AiOverrides,
@@ -244,12 +257,19 @@ export async function generateQuestions(
       body: JSON.stringify({
         model,
         messages: [
-          { role: "system", content: buildSystemPrompt({ ...opts, count }) },
+          {
+            role: "system",
+            content: buildSystemPrompt({
+              ...opts,
+              count,
+              season: opts.season || "2026",
+            }),
+          },
           {
             role: "user",
             content: `Generate ${count} Division ${opts.division} "${
               opts.eventName
-            }" questions${
+            }" questions for the ${opts.season || "2026"} season rules${
               opts.topic ? ` about: ${opts.topic}` : ""
             }. Return only the JSON object.`,
           },
