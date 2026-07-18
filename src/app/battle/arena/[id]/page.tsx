@@ -46,10 +46,16 @@ export default function BattleArenaPage({
     loadBattle();
   }, [loadBattle]);
 
-  // start per-question timer when a new question becomes current
+  // Whether a playable battle is loaded. This is a STABLE boolean that doesn't
+  // change on every opponent poll (so the effect below doesn't reset mid-question).
+  const battleReady = Boolean(battle && battle.status !== "finished");
+
+  // Start the per-question timer when the battle loads OR the question advances.
+  // NOTE: deps deliberately EXCLUDE `battle` — otherwise the 2.5s opponent poll
+  // would reset `revealed`/`locked` and wipe your answer feedback, making it
+  // feel like your selection never registered.
   useEffect(() => {
-    if (!battle || battle.status === "finished") return;
-    if (current >= battle.questions.length) return;
+    if (!battleReady) return;
     qStartRef.current = Date.now();
     setElapsed(0);
     setLocked(false);
@@ -61,7 +67,8 @@ export default function BattleArenaPage({
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [battle, current]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [current, battleReady]);
 
   // poll for opponent progress (matters for human opponents) + final state
   useEffect(() => {
@@ -69,7 +76,8 @@ export default function BattleArenaPage({
     if (battle.status === "finished") return;
     const poll = setInterval(loadBattle, 2500);
     return () => clearInterval(poll);
-  }, [battleId, battle, loadBattle]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [battleId, battle?.status, loadBattle]);
 
   const answer = async (selectedIndex: number) => {
     if (!battle || locked || revealed) return;
