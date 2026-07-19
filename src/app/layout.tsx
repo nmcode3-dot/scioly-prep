@@ -20,11 +20,11 @@ const spaceGrotesk = Space_Grotesk({
 
 export const metadata: Metadata = {
   title: {
-    default: "SciOlyPrep — Science Olympiad Test Prep",
-    template: "%s · SciOlyPrep",
+    default: "SciOlyBattle — Science Olympiad 1v1 Battles",
+    template: "%s · SciOlyBattle",
   },
   description:
-    "Free Science Olympiad practice tests. Choose your event, division, difficulty, and season — then drill hundreds of exam-style questions with instant explanations.",
+    "Head-to-head Science Olympiad battles. Pick an event, challenge a ranked opponent, duel best-of-five on the current season's rules, and climb the rating ladder.",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

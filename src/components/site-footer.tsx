@@ -11,32 +11,27 @@ export function SiteFooter() {
                 ⚗
               </span>
               <span className="font-display text-[17px] font-bold tracking-tight text-slate-900">
-                SciOly<span className="text-brand-600">Prep</span>
+                SciOly<span className="text-violet-600">Battle</span>
               </span>
             </div>
             <p className="mt-4 max-w-md text-sm leading-relaxed text-slate-600">
-              A free practice platform for Science Olympiad competitors.
-              Drill study-event questions modeled on official invitational
-              tests and rules manuals, across the current and upcoming seasons.
+              A head-to-head Science Olympiad battle arena. Pick an event,
+              challenge a ranked opponent, and duel best-of-five on the current
+              season&apos;s rules. Win rating, climb the ladder.
             </p>
           </div>
 
           <div>
-            <h3 className="text-sm font-semibold text-slate-900">Practice</h3>
+            <h3 className="text-sm font-semibold text-slate-900">Arena</h3>
             <ul className="mt-3 space-y-2 text-sm text-slate-600">
               <li>
-                <Link className="hover:text-brand-700" href="/events">
-                  Browse events
+                <Link className="hover:text-violet-700" href="/battle">
+                  Start a battle
                 </Link>
               </li>
               <li>
-                <Link className="hover:text-brand-700" href="/practice">
-                  Build a quiz
-                </Link>
-              </li>
-              <li>
-                <Link className="hover:text-brand-700" href="/progress">
-                  Your progress
+                <Link className="hover:text-violet-700" href="/">
+                  Home
                 </Link>
               </li>
             </ul>

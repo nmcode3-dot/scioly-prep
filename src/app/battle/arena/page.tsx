@@ -6,10 +6,14 @@ import { useRouter } from "next/navigation";
 import {
   getActiveBattle,
   judge,
+  applyRating,
+  getRating,
+  setRating,
   formatMs,
   type ClientBattle,
   type BattleAnswer,
   type Judgment,
+  type RatingChange,
 } from "@/lib/battle-client";
 import { divisionShort } from "@/lib/ui";
 
@@ -24,6 +28,7 @@ export default function BattleArenaPage() {
   const [elapsed, setElapsed] = useState(0);
   const [botAnswered, setBotAnswered] = useState(0);
   const [done, setDone] = useState<Judgment | null>(null);
+  const [ratingChange, setRatingChange] = useState<RatingChange | null>(null);
   const [ready, setReady] = useState(false);
 
   const qStartRef = useRef<number>(0);
@@ -75,6 +80,16 @@ export default function BattleArenaPage() {
       botTimeouts.current.forEach(clearTimeout);
     };
   }, []);
+
+  // When the battle finishes, compute & persist the rating change.
+  useEffect(() => {
+    if (!done || !battle) return;
+    const myRating = getRating();
+    const change = applyRating(myRating, battle.away.rating, done);
+    setRating(change.newRating);
+    setRatingChange(change);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [done]);
 
   const answer = (selectedIndex: number) => {
     if (!battle || revealed) return;
@@ -141,8 +156,42 @@ export default function BattleArenaPage() {
             />
           </div>
 
+          {/* Rating change */}
+          {ratingChange && (
+            <div className="mt-5 inline-flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-5 py-3">
+              <div className="text-center">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                  Rating
+                </p>
+                <p className="font-display text-lg font-bold text-slate-500 line-through">
+                  {ratingChange.oldRating}
+                </p>
+              </div>
+              <span className="text-slate-300">→</span>
+              <div className="text-center">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                  New
+                </p>
+                <p className="font-display text-2xl font-bold text-slate-900">
+                  {ratingChange.newRating}
+                </p>
+              </div>
+              <span
+                className={`ml-1 rounded-full px-3 py-1 text-sm font-bold ${
+                  ratingChange.delta >= 0
+                    ? "bg-emerald-100 text-emerald-700"
+                    : "bg-rose-100 text-rose-700"
+                }`}
+              >
+                {ratingChange.delta >= 0 ? "+" : ""}
+                {ratingChange.delta}
+              </span>
+            </div>
+          )}
+
           <p className="mt-5 text-xs text-slate-400">
-            Judged on correct answers first, then total time.
+            Judged on correct answers first, then total time. Rating changes scale with
+            the opponent&apos;s rating and your margin of victory.
           </p>
 
           <div className="mt-6 flex flex-wrap justify-center gap-3">

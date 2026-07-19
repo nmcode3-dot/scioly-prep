@@ -8,6 +8,7 @@ import {
   BATTLE_QUESTIONS,
   BATTLE_SEASON,
   simulateBot,
+  botRating,
   skillLabel,
   setActiveBattle,
   type ClientBattle,
@@ -87,6 +88,7 @@ export default function BattleLobbyPage() {
           emoji: bot.emoji,
           isBot: true,
           skill: bot.skill,
+          rating: botRating(bot.skill),
           answers: simulateBot(questions, bot.skill),
         },
       };
@@ -156,10 +158,15 @@ export default function BattleLobbyPage() {
             <div className="min-w-0 flex-1">
               <p className="truncate font-semibold text-slate-800">{b.nickname}</p>
               <p className="truncate text-xs text-slate-500">{b.blurb}</p>
-              <div className="mt-1.5 flex items-center gap-1">
-                <SkillBar skill={b.skill} />
-                <span className="text-[10px] font-medium text-slate-400">
-                  {skillLabel(b.skill)}
+              <div className="mt-1.5 flex items-center justify-between">
+                <div className="flex items-center gap-1">
+                  <SkillBar skill={b.skill} />
+                  <span className="text-[10px] font-medium text-slate-400">
+                    {skillLabel(b.skill)}
+                  </span>
+                </div>
+                <span className="text-[11px] font-bold text-slate-500">
+                  {botRating(b.skill)}
                 </span>
               </div>
             </div>

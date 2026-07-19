@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { getRating } from "@/lib/battle-client";
 
 const EMOJIS = ["🦊", "🐼", "🐧", "🦁", "🐸", "🐙", "🦄", "🐯", "🦉", "🐲", "🦝", "🐳"];
 
@@ -15,8 +16,10 @@ export default function BattleSetupPage() {
   const [eventName, setEventName] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [rating, setRating] = useState<number | null>(null);
 
   useEffect(() => {
+    setRating(getRating());
     // restore saved nickname
     const saved = sessionStorage.getItem("scioly.battle.nick");
     if (saved) setNickname(saved);
@@ -70,6 +73,13 @@ export default function BattleSetupPage() {
           Best of 5. Most correct answers wins — ties broken by speed. Current
           2025–26 season rules only.
         </p>
+        <div className="mt-4 inline-flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2">
+          <span className="text-amber-500">★</span>
+          <span className="font-display text-lg font-bold text-slate-800">
+            {rating ?? "—"}
+          </span>
+          <span className="text-xs font-medium text-slate-500">your rating</span>
+        </div>
       </div>
 
       <div className="mt-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">

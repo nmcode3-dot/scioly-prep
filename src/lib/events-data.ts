@@ -1,4 +1,11 @@
-import type { EventInfo } from "@/lib/types";
+export interface EventInfo {
+  name: string;
+  category: string;
+  type: "Study" | "Lab" | "Build";
+  icon: string;
+  short: string;
+  long: string;
+}
 
 /**
  * Shared descriptions for each event, keyed by canonical name.
