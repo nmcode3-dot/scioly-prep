@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useUser } from "@/components/user-provider";
+import { signup, login } from "@/lib/account";
 
 const EMOJIS = ["🦊", "🐼", "🐧", "🦁", "🐸", "🐙", "🦄", "🐯", "🦉", "🐲", "🦝", "🐳"];
 
@@ -41,27 +42,20 @@ export function AuthModal({
   const submit = async () => {
     setBusy(true);
     setError(null);
-    const endpoint = mode === "login" ? "/api/auth/login" : "/api/auth/signup";
-    const payload =
-      mode === "login"
-        ? { username, password }
-        : { username, password, emoji };
     try {
-      const res = await fetch(endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      const data = await res.json();
+      const res =
+        mode === "login"
+          ? await login(username, password)
+          : await signup(username, password, emoji);
       if (!res.ok) {
-        setError(data.error ?? "Something went wrong.");
+        setError(res.error);
         setBusy(false);
         return;
       }
-      await refresh();
+      refresh();
       onClose();
     } catch {
-      setError("Network error. Try again.");
+      setError("Something went wrong. Try again.");
       setBusy(false);
     }
   };

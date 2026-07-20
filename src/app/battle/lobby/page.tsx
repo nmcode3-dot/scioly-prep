@@ -6,7 +6,10 @@ import { useRouter } from "next/navigation";
 import { useUser } from "@/components/user-provider";
 import {
   BOT_ROSTER,
+  BATTLE_QUESTIONS,
+  BATTLE_SEASON,
   botRating,
+  simulateBot,
   skillLabel,
   setActiveBattle,
   type ActiveBattle,
@@ -46,33 +49,45 @@ export default function BattleLobbyPage() {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 90000);
     try {
-      const res = await fetch("/api/battle/create", {
+      // Generate current-season questions (stateless server call), then simulate
+      // the opponent client-side. No database needed.
+      const res = await fetch("/api/ai-quiz", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          opponent: {
-            nickname: bot.nickname,
-            emoji: bot.emoji,
-            skill: bot.skill,
-            isBot: true,
-          },
           eventName,
           division,
+          season: BATTLE_SEASON,
+          difficulty: "medium",
+          count: BATTLE_QUESTIONS,
         }),
         signal: controller.signal,
       });
       const data = await res.json();
-      if (!res.ok || !data.battleId) {
-        throw new Error(data.error || "Couldn't start the battle.");
+      if (!res.ok || !Array.isArray(data.questions) || data.questions.length === 0) {
+        throw new Error(data.error || "Couldn't generate battle questions.");
       }
+      const questions = data.questions.map(
+        (q: ActiveBattle["questions"][number]) => ({
+          prompt: q.prompt,
+          options: q.options,
+          correctIndex: q.correctIndex,
+          explanation: q.explanation,
+          topic: q.topic,
+        }),
+      );
       const payload: ActiveBattle = {
-        battleId: data.battleId,
-        eventName: data.eventName,
-        division: data.division,
-        season: data.season,
-        questions: data.questions,
-        opponent: data.opponent,
-        botAnswers: data.botAnswers,
+        eventName,
+        division,
+        season: BATTLE_SEASON,
+        questions,
+        opponent: {
+          nickname: bot.nickname,
+          emoji: bot.emoji,
+          rating: botRating(bot.skill),
+          isBot: true,
+        },
+        botAnswers: simulateBot(questions, bot.skill),
       };
       setActiveBattle(payload);
       router.push("/battle/arena");

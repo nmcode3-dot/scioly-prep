@@ -14,34 +14,32 @@ instant scoring and a full explanation for every question.
 
 ---
 
-## 🚀 Deploy to Vercel (free, ~5 minutes)
+## 🚀 Deploy to Vercel (free, ~3 minutes)
 
-A standard Next.js app. Battles + accounts need a database and an AI key, so
-you'll set **two** environment variables: a hosted Postgres connection string
-and a free Groq key. The database tables **auto-create on first launch**, so no
-migration commands are needed.
+A standard Next.js app. **You only need ONE thing: a free Groq key** — accounts
+and rating are stored in each user's browser (localStorage), so there's **no
+database to set up**.
 
 ### Step 1 — Push this project to GitHub
 Create a new (private recommended) repo and push this code to it.
 
-### Step 2 — Get a free Groq API key (for battle questions)
+### Step 1 — Get a free Groq API key (for battle questions)
 1. Go to **[console.groq.com/keys](https://console.groq.com/keys)** and create a key (free, no card).
 2. Copy the key (starts with `gsk_`).
 
-### Step 3 — Import to Vercel
+### Step 2 — Import to Vercel
 1. Go to **[vercel.com/new](https://vercel.com/new)** and import your GitHub repo.
 2. Vercel auto-detects Next.js — leave the build settings as-is.
-3. Under **Environment Variables**, add **two**:
+3. Under **Environment Variables**, add **one**:
 
    | Name | Value |
    |---|---|
-   | `DATABASE_URL` | *(your Neon pooled connection string from Step 1)* |
-   | `GROQ_API_KEY` | *(your `gsk_...` key from Step 2)* |
+   | `GROQ_API_KEY` | *(your `gsk_...` key from Step 1)* |
 
 4. Click **Deploy**. 🎉
 
-> **The database tables auto-create on first launch** (users, sessions, battles)
-> — you don't need to run any migrations.
+> **No database needed.** Accounts and rating live in each user's browser
+> (localStorage), so the app deploys with just the Groq key.
 
 You'll get a permanent URL like `scioly-prep.vercel.app`. You can rename it in
 **Project → Settings → Domains**, or add a custom domain you own (free on Vercel).
@@ -77,11 +75,11 @@ Open **http://localhost:3000**.
 
 | Variable | Required | Description |
 |---|---|---|
-| `DATABASE_URL` | ✅ Yes | PostgreSQL connection string (accounts + battles) — tables auto-create |
 | `GROQ_API_KEY` | ✅ Yes | Free Groq key — powers battle questions |
 | `GROQ_MODEL` | Optional | Model name (default: `llama-3.3-70b-versatile`) |
 
-See [`.env.example`](.env.example).
+> Accounts + rating are stored in the browser (localStorage) — **no `DATABASE_URL`
+> is needed.** See [`.env.example`](.env.example).
 
 ---
 

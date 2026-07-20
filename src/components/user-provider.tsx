@@ -2,25 +2,22 @@
 
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { AuthModal } from "@/components/auth-modal";
-
-export interface CurrentUser {
-  id: number;
-  username: string;
-  emoji: string;
-  rating: number;
-}
+import {
+  getCurrent,
+  type PublicAccount,
+} from "@/lib/account";
 
 interface UserCtx {
-  user: CurrentUser | null;
+  user: PublicAccount | null;
   loading: boolean;
-  refresh: () => Promise<void>;
+  refresh: () => void;
   openAuth: (mode?: "login" | "signup") => void;
 }
 
 const Ctx = createContext<UserCtx>({
   user: null,
   loading: true,
-  refresh: async () => {},
+  refresh: () => {},
   openAuth: () => {},
 });
 
@@ -29,21 +26,14 @@ export function useUser() {
 }
 
 export function UserProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<CurrentUser | null>(null);
+  const [user, setUser] = useState<PublicAccount | null>(null);
   const [loading, setLoading] = useState(true);
   const [authOpen, setAuthOpen] = useState(false);
   const [authMode, setAuthMode] = useState<"login" | "signup">("login");
 
-  const refresh = useCallback(async () => {
-    try {
-      const res = await fetch("/api/auth/me", { cache: "no-store" });
-      const data = await res.json();
-      setUser(data.user ?? null);
-    } catch {
-      setUser(null);
-    } finally {
-      setLoading(false);
-    }
+  const refresh = useCallback(() => {
+    setUser(getCurrent());
+    setLoading(false);
   }, []);
 
   const openAuth = useCallback((mode: "login" | "signup" = "login") => {
@@ -53,15 +43,27 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     refresh();
+    const onChange = () => refresh();
     const onFocus = () => refresh();
+    window.addEventListener("scioly-account-change", onChange);
+    window.addEventListener("storage", onChange);
     window.addEventListener("focus", onFocus);
-    return () => window.removeEventListener("focus", onFocus);
+    return () => {
+      window.removeEventListener("scioly-account-change", onChange);
+      window.removeEventListener("storage", onChange);
+      window.removeEventListener("focus", onFocus);
+    };
   }, [refresh]);
 
   return (
     <Ctx.Provider value={{ user, loading, refresh, openAuth }}>
       {children}
-      <AuthModal open={authOpen} onClose={() => setAuthOpen(false)} key={authMode} initialMode={authMode} />
+      <AuthModal
+        open={authOpen}
+        onClose={() => setAuthOpen(false)}
+        key={authMode}
+        initialMode={authMode}
+      />
     </Ctx.Provider>
   );
 }

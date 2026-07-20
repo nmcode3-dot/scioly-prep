@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { useUser } from "@/components/user-provider";
 import { ratingTier } from "@/lib/battle-client";
+import { logout } from "@/lib/account";
 
 export function SiteNav() {
   const pathname = usePathname();
@@ -14,9 +15,9 @@ export function SiteNav() {
   const isActive = (href: string) =>
     href === "/" ? pathname === "/" : pathname.startsWith(href);
 
-  const logout = async () => {
-    await fetch("/api/auth/logout", { method: "POST" });
-    await refresh();
+  const doLogout = () => {
+    logout();
+    refresh();
     setOpen(false);
   };
 
@@ -71,7 +72,7 @@ export function SiteNav() {
               </span>
               <button
                 type="button"
-                onClick={logout}
+                onClick={doLogout}
                 className="rounded-lg px-2.5 py-2 text-sm font-medium text-slate-400 hover:bg-slate-100 hover:text-slate-700"
               >
                 Log out
@@ -135,7 +136,7 @@ export function SiteNav() {
                 <div className="mt-1 rounded-lg bg-slate-50 px-3 py-2 text-sm font-bold text-slate-700">
                   {user.emoji} {user.username} · ★ {user.rating} <span className="text-xs font-medium text-slate-400">{tier?.label}</span>
                 </div>
-                <button type="button" onClick={logout} className="rounded-lg px-3 py-2.5 text-left text-sm font-medium text-slate-600 hover:bg-slate-100">
+                <button type="button" onClick={doLogout} className="rounded-lg px-3 py-2.5 text-left text-sm font-medium text-slate-600 hover:bg-slate-100">
                   Log out
                 </button>
               </>

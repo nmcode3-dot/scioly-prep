@@ -163,7 +163,6 @@ export function setRating(r: number): void {
 // The battle is generated server-side (/api/battle/create) and stored here so
 // the arena can render it; the result is submitted to /api/battle/submit.
 export interface ActiveBattle {
-  battleId: number;
   eventName: string;
   division: string;
   season: string;

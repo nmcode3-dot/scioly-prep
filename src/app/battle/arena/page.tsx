@@ -6,16 +6,19 @@ import { useRouter } from "next/navigation";
 import { useUser } from "@/components/user-provider";
 import {
   getActiveBattle,
+  judge,
+  applyRating,
   formatMs,
   type ActiveBattle,
   type BattleAnswer,
   type Judgment,
 } from "@/lib/battle-client";
+import { updateRating } from "@/lib/account";
 import { divisionShort } from "@/lib/ui";
 
 const LETTERS = ["A", "B", "C", "D", "E", "F"];
 
-interface ServerResult {
+interface BattleResult {
   judgment: Judgment;
   ratingChange: { delta: number; oldRating: number; newRating: number };
 }
@@ -29,9 +32,7 @@ export default function BattleArenaPage() {
   const [revealed, setRevealed] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [botAnswered, setBotAnswered] = useState(0);
-  const [result, setResult] = useState<ServerResult | null>(null);
-  const [submitting, setSubmitting] = useState(false);
-  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [result, setResult] = useState<BattleResult | null>(null);
 
   const qStartRef = useRef<number>(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -86,34 +87,35 @@ export default function BattleArenaPage() {
     setRevealed(true);
   };
 
-  const submit = async () => {
-    if (!battle) return;
-    setSubmitting(true);
-    setSubmitError(null);
-    try {
-      const res = await fetch("/api/battle/submit", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ battleId: battle.battleId, answers }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || "Couldn't submit the battle.");
-      }
-      setBotAnswered(battle.questions.length);
-      setResult(data as ServerResult);
-      refresh();
-    } catch (err) {
-      setSubmitError(err instanceof Error ? err.message : "Submission failed.");
-    } finally {
-      setSubmitting(false);
-    }
+  const finish = () => {
+    if (!battle || !user) return;
+    // Judge client-side (correctness, then time).
+    const j = judge(answers, {
+      eventName: battle.eventName,
+      division: battle.division,
+      season: battle.season,
+      questions: battle.questions,
+      home: { nickname: user.username, emoji: user.emoji },
+      away: {
+        nickname: battle.opponent.nickname,
+        emoji: battle.opponent.emoji,
+        isBot: true,
+        skill: 0,
+        rating: battle.opponent.rating,
+        answers: battle.botAnswers,
+      },
+    });
+    const change = applyRating(user.rating, battle.opponent.rating, j);
+    updateRating(change.newRating); // persist locally
+    setBotAnswered(battle.questions.length);
+    setResult({ judgment: j, ratingChange: change });
+    refresh();
   };
 
   const next = () => {
     if (!battle) return;
     if (current + 1 >= battle.questions.length) {
-      submit();
+      finish();
     } else {
       setCurrent((c) => c + 1);
     }
@@ -204,18 +206,7 @@ export default function BattleArenaPage() {
         ))}
       </div>
 
-      {submitting && (
-        <div className="mt-5 rounded-2xl border border-violet-200 bg-violet-50 p-4 text-center">
-          <span className="mx-auto mb-2 block h-6 w-6 animate-spin rounded-full border-2 border-violet-300 border-t-violet-600" />
-          <p className="text-sm font-semibold text-violet-700">Calculating results…</p>
-        </div>
-      )}
-
-      {submitError && (
-        <p className="mt-5 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700 ring-1 ring-rose-200">{submitError}</p>
-      )}
-
-      {q && !submitting && (
+      {q && (
         <div className="mt-5 animate-float-up rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-7">
           <div className="flex items-center justify-between">
             <span className="rounded-full bg-violet-50 px-2.5 py-0.5 text-[11px] font-semibold text-violet-700">{q.topic}</span>
