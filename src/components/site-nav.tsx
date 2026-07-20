@@ -2,29 +2,25 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
-import { getRating, ratingTier } from "@/lib/battle-client";
+import { useState } from "react";
+import { useUser } from "@/components/user-provider";
+import { ratingTier } from "@/lib/battle-client";
 
 export function SiteNav() {
   const pathname = usePathname();
+  const { user, loading, openAuth, refresh } = useUser();
   const [open, setOpen] = useState(false);
-  const [rating, setRating] = useState<number | null>(null);
-
-  useEffect(() => {
-    const read = () => setRating(getRating());
-    read();
-    window.addEventListener("scioly-rating-change", read);
-    window.addEventListener("focus", read);
-    return () => {
-      window.removeEventListener("scioly-rating-change", read);
-      window.removeEventListener("focus", read);
-    };
-  }, []);
 
   const isActive = (href: string) =>
     href === "/" ? pathname === "/" : pathname.startsWith(href);
 
-  const tier = rating !== null ? ratingTier(rating) : null;
+  const logout = async () => {
+    await fetch("/api/auth/logout", { method: "POST" });
+    await refresh();
+    setOpen(false);
+  };
+
+  const tier = user ? ratingTier(user.rating) : null;
 
   return (
     <header className="sticky top-0 z-40 border-b border-slate-200/70 bg-white/80 backdrop-blur-md">
@@ -57,24 +53,47 @@ export function SiteNav() {
           </Link>
         </div>
 
-        <div className="hidden md:block">
-          {rating !== null ? (
-            <Link
-              href="/battle"
-              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm font-bold text-slate-800 shadow-sm transition hover:bg-slate-50"
-              title={tier?.label}
-            >
-              <span className="text-amber-500">★</span>
-              <span>{rating}</span>
-              <span className="text-xs font-medium text-slate-400">{tier?.label}</span>
-            </Link>
+        <div className="hidden items-center gap-2 md:flex">
+          {loading ? (
+            <span className="h-8 w-24 animate-pulse rounded-xl bg-slate-100" />
+          ) : user ? (
+            <>
+              <span
+                className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-800 shadow-sm"
+                title={tier?.label}
+              >
+                <span className="text-amber-500">★</span>
+                <span>{user.rating}</span>
+                <span className="text-xs font-medium text-slate-400">{tier?.label}</span>
+              </span>
+              <span className="inline-flex items-center gap-1.5 rounded-xl bg-violet-50 px-3 py-2 text-sm font-semibold text-violet-700">
+                {user.emoji} {user.username}
+              </span>
+              <button
+                type="button"
+                onClick={logout}
+                className="rounded-lg px-2.5 py-2 text-sm font-medium text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+              >
+                Log out
+              </button>
+            </>
           ) : (
-            <Link
-              href="/battle"
-              className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:opacity-95"
-            >
-              ⚔️ Start battling
-            </Link>
+            <>
+              <button
+                type="button"
+                onClick={() => openAuth("login")}
+                className="rounded-lg px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+              >
+                Log in
+              </button>
+              <button
+                type="button"
+                onClick={() => openAuth("signup")}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:opacity-95"
+              >
+                Sign up
+              </button>
+            </>
           )}
         </div>
 
@@ -111,9 +130,23 @@ export function SiteNav() {
             <Link href="/battle" onClick={() => setOpen(false)} className={`rounded-lg px-3 py-2.5 text-sm font-medium ${isActive("/battle") ? "bg-violet-50 text-violet-700" : "text-slate-700 hover:bg-slate-100"}`}>
               Battle
             </Link>
-            {rating !== null && (
-              <div className="mt-1 rounded-lg bg-slate-50 px-3 py-2 text-sm font-bold text-slate-700">
-                ★ {rating} <span className="text-xs font-medium text-slate-400">{tier?.label}</span>
+            {user ? (
+              <>
+                <div className="mt-1 rounded-lg bg-slate-50 px-3 py-2 text-sm font-bold text-slate-700">
+                  {user.emoji} {user.username} · ★ {user.rating} <span className="text-xs font-medium text-slate-400">{tier?.label}</span>
+                </div>
+                <button type="button" onClick={logout} className="rounded-lg px-3 py-2.5 text-left text-sm font-medium text-slate-600 hover:bg-slate-100">
+                  Log out
+                </button>
+              </>
+            ) : (
+              <div className="mt-1 flex gap-2">
+                <button type="button" onClick={() => { setOpen(false); openAuth("login"); }} className="flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700">
+                  Log in
+                </button>
+                <button type="button" onClick={() => { setOpen(false); openAuth("signup"); }} className="flex-1 rounded-lg bg-violet-600 px-3 py-2 text-sm font-semibold text-white">
+                  Sign up
+                </button>
               </div>
             )}
           </div>

@@ -3,43 +3,39 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useUser } from "@/components/user-provider";
 import {
   BOT_ROSTER,
-  BATTLE_QUESTIONS,
-  BATTLE_SEASON,
-  simulateBot,
   botRating,
   skillLabel,
   setActiveBattle,
-  type ClientBattle,
+  type ActiveBattle,
 } from "@/lib/battle-client";
 
 export default function BattleLobbyPage() {
   const router = useRouter();
+  const { user, loading, openAuth } = useUser();
   const [busy, setBusy] = useState(false);
   const [busyName, setBusyName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
-  const [nickname, setNickname] = useState("");
-  const [emoji, setEmoji] = useState("🦊");
   const [eventName, setEventName] = useState("");
   const [division, setDivision] = useState<"B" | "C">("C");
 
-  // load saved setup (client-only; sessionStorage isn't available during SSR)
   useEffect(() => {
-    const nick = sessionStorage.getItem("scioly.battle.nick");
-    const em = sessionStorage.getItem("scioly.battle.emoji");
     const div = sessionStorage.getItem("scioly.battle.division");
     const ev = sessionStorage.getItem("scioly.battle.event");
-    setNickname(nick ?? "");
-    setEmoji(em ?? "🦊");
     setDivision((div as "B" | "C") ?? "C");
     setEventName(ev ?? "");
     setReady(true);
   }, []);
 
   const challenge = async (bot: (typeof BOT_ROSTER)[number]) => {
-    if (!nickname || !eventName) {
+    if (!user) {
+      openAuth("login");
+      return;
+    }
+    if (!eventName) {
       router.replace("/battle");
       return;
     }
@@ -49,50 +45,36 @@ export default function BattleLobbyPage() {
 
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 90000);
-
     try {
-      // Generate current-season questions (stateless server call).
-      const res = await fetch("/api/ai-quiz", {
+      const res = await fetch("/api/battle/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          opponent: {
+            nickname: bot.nickname,
+            emoji: bot.emoji,
+            skill: bot.skill,
+            isBot: true,
+          },
           eventName,
           division,
-          season: BATTLE_SEASON,
-          difficulty: "medium",
-          count: BATTLE_QUESTIONS,
         }),
         signal: controller.signal,
       });
       const data = await res.json();
-      if (!res.ok || !Array.isArray(data.questions) || data.questions.length === 0) {
-        throw new Error(data.error || "Couldn't generate battle questions. Try again.");
+      if (!res.ok || !data.battleId) {
+        throw new Error(data.error || "Couldn't start the battle.");
       }
-
-      const questions = data.questions.map((q: ClientBattle["questions"][number]) => ({
-        prompt: q.prompt,
-        options: q.options,
-        correctIndex: q.correctIndex,
-        explanation: q.explanation,
-        topic: q.topic,
-      }));
-
-      const battle: ClientBattle = {
-        eventName,
-        division,
-        season: BATTLE_SEASON,
-        questions,
-        home: { nickname, emoji },
-        away: {
-          nickname: bot.nickname,
-          emoji: bot.emoji,
-          isBot: true,
-          skill: bot.skill,
-          rating: botRating(bot.skill),
-          answers: simulateBot(questions, bot.skill),
-        },
+      const payload: ActiveBattle = {
+        battleId: data.battleId,
+        eventName: data.eventName,
+        division: data.division,
+        season: data.season,
+        questions: data.questions,
+        opponent: data.opponent,
+        botAnswers: data.botAnswers,
       };
-      setActiveBattle(battle);
+      setActiveBattle(payload);
       router.push("/battle/arena");
     } catch (err) {
       setBusy(false);
@@ -109,7 +91,23 @@ export default function BattleLobbyPage() {
     }
   };
 
-  if (!ready) {
+  if (!loading && !user) {
+    return (
+      <div className="mx-auto max-w-md px-4 py-20 text-center">
+        <p className="text-4xl">🔐</p>
+        <h1 className="mt-4 font-display text-2xl font-bold text-slate-900">Log in to battle</h1>
+        <button
+          type="button"
+          onClick={() => openAuth("login")}
+          className="mt-5 rounded-xl bg-violet-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-violet-700"
+        >
+          Log in
+        </button>
+      </div>
+    );
+  }
+
+  if (!ready || loading) {
     return <div className="py-20 text-center text-slate-400">Loading lobby…</div>;
   }
 
@@ -121,10 +119,10 @@ export default function BattleLobbyPage() {
             ⚔️ Battle Lobby
           </span>
           <h1 className="mt-2 font-display text-2xl font-bold text-slate-900">
-            {emoji} {nickname || "Player"}
+            {user?.emoji} {user?.username}
           </h1>
           <p className="text-sm text-slate-500">
-            {eventName || "Event"} · Division {division} · 2025–26 rules
+            {eventName} · Division {division} · 2025–26 rules
           </p>
         </div>
         <Link
@@ -161,35 +159,25 @@ export default function BattleLobbyPage() {
               <div className="mt-1.5 flex items-center justify-between">
                 <div className="flex items-center gap-1">
                   <SkillBar skill={b.skill} />
-                  <span className="text-[10px] font-medium text-slate-400">
-                    {skillLabel(b.skill)}
-                  </span>
+                  <span className="text-[10px] font-medium text-slate-400">{skillLabel(b.skill)}</span>
                 </div>
-                <span className="text-[11px] font-bold text-slate-500">
-                  {botRating(b.skill)}
-                </span>
+                <span className="text-[11px] font-bold text-slate-500">{botRating(b.skill)}</span>
               </div>
             </div>
-            <span className="text-sm font-bold text-violet-600 opacity-0 transition group-hover:opacity-100">
-              ⚔️
-            </span>
+            <span className="text-sm font-bold text-violet-600 opacity-0 transition group-hover:opacity-100">⚔️</span>
           </button>
         ))}
       </div>
 
       {error && (
-        <p className="mt-6 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700 ring-1 ring-rose-200">
-          {error}
-        </p>
+        <p className="mt-6 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700 ring-1 ring-rose-200">{error}</p>
       )}
 
       {busy && (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm">
           <div className="rounded-2xl bg-white p-6 text-center shadow-xl">
             <span className="mx-auto mb-3 block h-8 w-8 animate-spin rounded-full border-4 border-violet-200 border-t-violet-600" />
-            <p className="text-sm font-semibold text-slate-700">
-              Challenging {busyName}…
-            </p>
+            <p className="text-sm font-semibold text-slate-700">Challenging {busyName}…</p>
             <p className="text-xs text-slate-400">Generating 2025–26 questions</p>
           </div>
         </div>
@@ -201,10 +189,7 @@ export default function BattleLobbyPage() {
 function SkillBar({ skill }: { skill: number }) {
   return (
     <div className="h-1.5 w-20 overflow-hidden rounded-full bg-slate-200">
-      <div
-        className="h-full rounded-full bg-gradient-to-r from-amber-400 to-rose-500"
-        style={{ width: `${Math.round(skill * 100)}%` }}
-      />
+      <div className="h-full rounded-full bg-gradient-to-r from-amber-400 to-rose-500" style={{ width: `${Math.round(skill * 100)}%` }} />
     </div>
   );
 }

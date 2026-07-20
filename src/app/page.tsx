@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import Link from "next/link";
-import { BOT_ROSTER, botRating, getRating, ratingTier, skillLabel } from "@/lib/battle-client";
+import { BOT_ROSTER, botRating, ratingTier, skillLabel } from "@/lib/battle-client";
+import { useUser } from "@/components/user-provider";
 
 const STEPS = [
   { icon: "🎯", title: "Pick your event", body: "Choose any Division B or C event. Battles use the official 2025–26 season rules — Anatomy covers the nervous & endocrine systems, Dynamic Planet covers oceanography, and so on." },
@@ -11,20 +11,14 @@ const STEPS = [
 ];
 
 export default function HomePage() {
-  const [rating, setRating] = useState<number | null>(null);
-
-  useEffect(() => {
-    const read = () => setRating(getRating());
-    read();
-    window.addEventListener("scioly-rating-change", read);
-    window.addEventListener("focus", read);
-    return () => {
-      window.removeEventListener("scioly-rating-change", read);
-      window.removeEventListener("focus", read);
-    };
-  }, []);
-
+  const { user, openAuth } = useUser();
+  const rating = user?.rating ?? null;
   const tier = rating !== null ? ratingTier(rating) : null;
+
+  const startBattling = () => {
+    if (!user) openAuth("signup");
+    else window.location.href = "/battle";
+  };
 
   return (
     <div>
@@ -48,13 +42,14 @@ export default function HomePage() {
               Win rating, climb the ladder, become Grandmaster.
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
-              <Link
-                href="/battle"
+              <button
+                type="button"
+                onClick={startBattling}
                 className="inline-flex items-center gap-2 rounded-xl bg-white px-6 py-3.5 text-sm font-bold text-brand-700 shadow-lg shadow-brand-900/30 transition hover:bg-brand-50"
               >
-                ⚔️ Start battling
+                {user ? "⚔️ Start battling" : "⚔️ Sign up to battle"}
                 <span aria-hidden>→</span>
-              </Link>
+              </button>
             </div>
 
             <div className="mt-10 flex flex-wrap gap-x-8 gap-y-4">
@@ -110,9 +105,9 @@ export default function HomePage() {
             ))}
           </div>
           <div className="mt-8 text-center">
-            <Link href="/battle" className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-6 py-3.5 text-sm font-bold text-white transition hover:bg-slate-800">
+            <button type="button" onClick={startBattling} className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-6 py-3.5 text-sm font-bold text-white transition hover:bg-slate-800">
               ⚔️ Enter the arena
-            </Link>
+            </button>
           </div>
         </div>
       </section>

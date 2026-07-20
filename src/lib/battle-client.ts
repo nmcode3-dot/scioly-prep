@@ -159,19 +159,31 @@ export function setRating(r: number): void {
   window.dispatchEvent(new Event("scioly-rating-change"));
 }
 
-// ───────────────────────── sessionStorage (active battle) ─────────────────────────
+// ───────────────────────── sessionStorage (active battle payload) ─────────────────────────
+// The battle is generated server-side (/api/battle/create) and stored here so
+// the arena can render it; the result is submitted to /api/battle/submit.
+export interface ActiveBattle {
+  battleId: number;
+  eventName: string;
+  division: string;
+  season: string;
+  questions: BattleQuestion[];
+  opponent: { nickname: string; emoji: string; rating: number; isBot: boolean };
+  botAnswers: BattleAnswer[];
+}
+
 const ACTIVE_KEY = "scioly.battle.active";
 
-export function setActiveBattle(b: ClientBattle): void {
+export function setActiveBattle(b: ActiveBattle): void {
   if (typeof window === "undefined") return;
   sessionStorage.setItem(ACTIVE_KEY, JSON.stringify(b));
 }
 
-export function getActiveBattle(): ClientBattle | null {
+export function getActiveBattle(): ActiveBattle | null {
   if (typeof window === "undefined") return null;
   try {
     const raw = sessionStorage.getItem(ACTIVE_KEY);
-    return raw ? (JSON.parse(raw) as ClientBattle) : null;
+    return raw ? (JSON.parse(raw) as ActiveBattle) : null;
   } catch {
     return null;
   }
