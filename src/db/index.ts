@@ -61,21 +61,44 @@ export async function ensureSchema(): Promise<void> {
       CREATE UNIQUE INDEX IF NOT EXISTS "sessions_token_uniq" ON "sessions" ("token");
       CREATE INDEX IF NOT EXISTS "sessions_user_idx" ON "sessions" ("user_id");
 
-      CREATE TABLE IF NOT EXISTS "battles" (
+      CREATE TABLE IF NOT EXISTS "match_requests" (
         "id" SERIAL PRIMARY KEY,
         "user_id" INTEGER NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
+        "username" TEXT NOT NULL,
+        "emoji" TEXT NOT NULL,
+        "rating" INTEGER NOT NULL,
+        "event_name" TEXT NOT NULL,
+        "division" TEXT NOT NULL,
+        "status" TEXT NOT NULL DEFAULT 'open',
+        "match_id" INTEGER,
+        "created_at" TIMESTAMP DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS "match_requests_status_idx" ON "match_requests" ("status");
+      CREATE INDEX IF NOT EXISTS "match_requests_user_idx" ON "match_requests" ("user_id");
+
+      CREATE TABLE IF NOT EXISTS "matches" (
+        "id" SERIAL PRIMARY KEY,
         "event_name" TEXT NOT NULL,
         "division" TEXT NOT NULL,
         "season" TEXT NOT NULL,
-        "opp_name" TEXT NOT NULL,
-        "opp_emoji" TEXT NOT NULL,
-        "opp_rating" INTEGER NOT NULL,
         "questions" JSONB NOT NULL,
-        "bot_answers" JSONB NOT NULL,
+        "player_a_id" INTEGER NOT NULL,
+        "player_a_name" TEXT NOT NULL,
+        "player_a_emoji" TEXT NOT NULL,
+        "player_a_rating" INTEGER NOT NULL,
+        "player_b_id" INTEGER NOT NULL,
+        "player_b_name" TEXT NOT NULL,
+        "player_b_emoji" TEXT NOT NULL,
+        "player_b_rating" INTEGER NOT NULL,
+        "answers_a" JSONB,
+        "answers_b" JSONB,
+        "submitted_a" BOOLEAN NOT NULL DEFAULT FALSE,
+        "submitted_b" BOOLEAN NOT NULL DEFAULT FALSE,
         "status" TEXT NOT NULL DEFAULT 'active',
         "created_at" TIMESTAMP DEFAULT NOW()
       );
-      CREATE INDEX IF NOT EXISTS "battles_user_idx" ON "battles" ("user_id");
+      CREATE INDEX IF NOT EXISTS "matches_a_idx" ON "matches" ("player_a_id");
+      CREATE INDEX IF NOT EXISTS "matches_b_idx" ON "matches" ("player_b_id");
     `);
     globalForDb.__sciolySchemaReady = true;
   } finally {

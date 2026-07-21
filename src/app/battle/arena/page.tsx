@@ -7,13 +7,11 @@ import { useUser } from "@/components/user-provider";
 import {
   getActiveBattle,
   judge,
-  applyRating,
   formatMs,
   type ActiveBattle,
   type BattleAnswer,
   type Judgment,
 } from "@/lib/battle-client";
-import { updateRating } from "@/lib/account";
 import { divisionShort } from "@/lib/ui";
 
 const LETTERS = ["A", "B", "C", "D", "E", "F"];
@@ -87,7 +85,7 @@ export default function BattleArenaPage() {
     setRevealed(true);
   };
 
-  const finish = () => {
+  const finish = async () => {
     if (!battle || !user) return;
     // Judge client-side (correctness, then time).
     const j = judge(answers, {
@@ -105,8 +103,19 @@ export default function BattleArenaPage() {
         answers: battle.botAnswers,
       },
     });
-    const change = applyRating(user.rating, battle.opponent.rating, j);
-    updateRating(change.newRating); // persist locally
+    // Send the result to the server to update the account rating.
+    let change = { delta: 0, oldRating: user.rating, newRating: user.rating };
+    try {
+      const res = await fetch("/api/battle/result", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ oppRating: battle.opponent.rating, judgment: j }),
+      });
+      const data = await res.json();
+      if (data.ratingChange) change = data.ratingChange;
+    } catch {
+      /* keep default no-op */
+    }
     setBotAnswered(battle.questions.length);
     setResult({ judgment: j, ratingChange: change });
     refresh();

@@ -5,14 +5,11 @@ import {
   integer,
   timestamp,
   jsonb,
+  boolean,
   index,
   uniqueIndex,
 } from "drizzle-orm/pg-core";
 
-/**
- * Accounts. A user signs up with just a username + password (no email).
- * Their username is shown as their battle name; rating is stored per-user.
- */
 export const users = pgTable(
   "users",
   {
@@ -23,23 +20,15 @@ export const users = pgTable(
     rating: integer("rating").notNull().default(1000),
     createdAt: timestamp("created_at").defaultNow(),
   },
-  (t) => ({
-    usernameUniq: uniqueIndex("users_username_uniq").on(t.username),
-  }),
+  (t) => ({ usernameUniq: uniqueIndex("users_username_uniq").on(t.username) }),
 );
 
-/**
- * Opaque session tokens (stored in an httpOnly cookie). DB-backed so they
- * work across serverless instances without a shared JWT secret.
- */
 export const sessions = pgTable(
   "sessions",
   {
     id: serial("id").primaryKey(),
     token: text("token").notNull(),
-    userId: integer("user_id")
-      .notNull()
-      .references(() => users.id, { onDelete: "cascade" }),
+    userId: integer("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
     createdAt: timestamp("created_at").defaultNow(),
     expiresAt: timestamp("expires_at").notNull(),
   },
@@ -49,31 +38,52 @@ export const sessions = pgTable(
   }),
 );
 
-/**
- * A single 1v1 battle. Stored so judging is server-authoritative (the client
- * can't fabricate a win or fake the opponent's rating).
- */
-export const battles = pgTable(
-  "battles",
+/** Open matchmaking requests — the live "looking for a match" board. */
+export const matchRequests = pgTable(
+  "match_requests",
   {
     id: serial("id").primaryKey(),
-    userId: integer("user_id")
-      .notNull()
-      .references(() => users.id, { onDelete: "cascade" }),
+    userId: integer("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    username: text("username").notNull(),
+    emoji: text("emoji").notNull(),
+    rating: integer("rating").notNull(),
     eventName: text("event_name").notNull(),
     division: text("division").notNull(),
-    season: text("season").notNull(),
-    oppName: text("opp_name").notNull(),
-    oppEmoji: text("opp_emoji").notNull(),
-    oppRating: integer("opp_rating").notNull(),
-    questions: jsonb("questions").notNull(),
-    botAnswers: jsonb("bot_answers").notNull(),
-    status: text("status").notNull().default("active"),
+    status: text("status").notNull().default("open"), // open | matched | cancelled
+    matchId: integer("match_id"),
     createdAt: timestamp("created_at").defaultNow(),
   },
   (t) => ({
-    byUser: index("battles_user_idx").on(t.userId),
+    byStatus: index("match_requests_status_idx").on(t.status),
+    byUser: index("match_requests_user_idx").on(t.userId),
   }),
+);
+
+/** A live human-vs-human match. Server-authoritative judging + rating. */
+export const matches = pgTable(
+  "matches",
+  {
+    id: serial("id").primaryKey(),
+    eventName: text("event_name").notNull(),
+    division: text("division").notNull(),
+    season: text("season").notNull(),
+    questions: jsonb("questions").notNull(),
+    playerAId: integer("player_a_id").notNull(),
+    playerAName: text("player_a_name").notNull(),
+    playerAEmoji: text("player_a_emoji").notNull(),
+    playerARating: integer("player_a_rating").notNull(),
+    playerBId: integer("player_b_id").notNull(),
+    playerBName: text("player_b_name").notNull(),
+    playerBEmoji: text("player_b_emoji").notNull(),
+    playerBRating: integer("player_b_rating").notNull(),
+    answersA: jsonb("answers_a"),
+    answersB: jsonb("answers_b"),
+    submittedA: boolean("submitted_a").notNull().default(false),
+    submittedB: boolean("submitted_b").notNull().default(false),
+    status: text("status").notNull().default("active"), // active | finished
+    createdAt: timestamp("created_at").defaultNow(),
+  },
+  (t) => ({ byA: index("matches_a_idx").on(t.playerAId), byB: index("matches_b_idx").on(t.playerBId) }),
 );
 
 export type UserRow = typeof users.$inferSelect;

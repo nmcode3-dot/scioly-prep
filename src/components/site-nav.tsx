@@ -5,7 +5,6 @@ import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { useUser } from "@/components/user-provider";
 import { ratingTier } from "@/lib/battle-client";
-import { logout } from "@/lib/account";
 
 export function SiteNav() {
   const pathname = usePathname();
@@ -15,9 +14,9 @@ export function SiteNav() {
   const isActive = (href: string) =>
     href === "/" ? pathname === "/" : pathname.startsWith(href);
 
-  const doLogout = () => {
-    logout();
-    refresh();
+  const doLogout = async () => {
+    await fetch("/api/auth/logout", { method: "POST" });
+    await refresh();
     setOpen(false);
   };
 
