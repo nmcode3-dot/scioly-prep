@@ -13,6 +13,7 @@ export const isDbAvailable = Boolean(databaseUrl);
 const globalForDb = globalThis as typeof globalThis & {
   __sciolyPool?: Pool;
   __sciolySchemaReady?: boolean;
+  __sciolyLastCleanup?: number;
 };
 
 let pool: Pool | null = null;
@@ -101,6 +102,39 @@ export async function ensureSchema(): Promise<void> {
       CREATE INDEX IF NOT EXISTS "matches_b_idx" ON "matches" ("player_b_id");
     `);
     globalForDb.__sciolySchemaReady = true;
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * Opportunistic cleanup: only RATING is kept long-term. Finished/abandoned
+ * matches are deleted shortly after they're done (so both players can still
+ * view results), and stale matchmaking requests are pruned. Throttled to run
+ * at most once per minute.
+ */
+const CLEANUP_INTERVAL_MS = 60_000;
+const MATCH_KEEP_MS = 30 * 60_000; // keep match rows ~30 min after creation
+const REQUEST_KEEP_MS = 15 * 60_000; // prune stale open requests after 15 min
+
+export async function cleanupStaleData(): Promise<void> {
+  if (!isDbAvailable || !pool) return;
+  const now = Date.now();
+  if (
+    globalForDb.__sciolyLastCleanup &&
+    now - globalForDb.__sciolyLastCleanup < CLEANUP_INTERVAL_MS
+  ) {
+    return;
+  }
+  globalForDb.__sciolyLastCleanup = now;
+  const client = await pool.connect();
+  try {
+    await client.query(`DELETE FROM matches WHERE "created_at" < NOW() - ($1 || ' milliseconds')::interval`, [
+      String(MATCH_KEEP_MS),
+    ]);
+    await client.query(`DELETE FROM match_requests WHERE "created_at" < NOW() - ($1 || ' milliseconds')::interval`, [
+      String(REQUEST_KEEP_MS),
+    ]);
   } finally {
     client.release();
   }

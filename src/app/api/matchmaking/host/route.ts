@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { db, ensureSchema } from "@/db";
+import { db, ensureSchema, cleanupStaleData } from "@/db";
 import { matchRequests } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
 import { getUserFromRequest, dbUnavailable } from "@/lib/auth";
@@ -20,6 +20,7 @@ export async function POST(req: NextRequest) {
   if (!eventName) return Response.json({ error: "Pick an event." }, { status: 400 });
 
   await ensureSchema();
+  cleanupStaleData().catch(() => {}); // opportunistic, throttled
   // Replace any existing open request for this user.
   await db.delete(matchRequests).where(and(eq(matchRequests.userId, user.id), eq(matchRequests.status, "open")));
   const [req2] = await db

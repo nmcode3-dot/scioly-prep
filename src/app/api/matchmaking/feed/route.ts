@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { db, ensureSchema } from "@/db";
+import { db, ensureSchema, cleanupStaleData } from "@/db";
 import { matchRequests } from "@/db/schema";
 import { eq, ne, desc, and } from "drizzle-orm";
 import { getUserFromRequest, dbUnavailable } from "@/lib/auth";
@@ -13,6 +13,7 @@ export async function GET(req: NextRequest) {
   const user = await getUserFromRequest(req);
   if (!user) return Response.json({ error: "You must be logged in." }, { status: 401 });
   await ensureSchema();
+  cleanupStaleData().catch(() => {}); // opportunistic, throttled
   const rows = await db
     .select()
     .from(matchRequests)
