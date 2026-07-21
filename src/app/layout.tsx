@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { Inter, Space_Grotesk } from "next/font/google";
+import { Analytics } from "@vercel/analytics/next";
 import "./globals.css";
 import { SiteNav } from "@/components/site-nav";
 import { SiteFooter } from "@/components/site-footer";
@@ -37,6 +38,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           <main className="flex-1">{children}</main>
           <SiteFooter />
         </UserProvider>
+        <Analytics />
       </body>
     </html>
   );
