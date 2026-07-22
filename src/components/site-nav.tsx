@@ -51,6 +51,14 @@ export function SiteNav() {
           >
             Battle
           </Link>
+          <Link
+            href="/leaderboard"
+            className={`rounded-lg px-3.5 py-2 text-sm font-medium transition-colors ${
+              isActive("/leaderboard") ? "bg-violet-50 text-violet-700" : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+            }`}
+          >
+            Leaderboard
+          </Link>
         </div>
 
         <div className="hidden items-center gap-2 md:flex">
@@ -129,6 +137,9 @@ export function SiteNav() {
             </Link>
             <Link href="/battle" onClick={() => setOpen(false)} className={`rounded-lg px-3 py-2.5 text-sm font-medium ${isActive("/battle") ? "bg-violet-50 text-violet-700" : "text-slate-700 hover:bg-slate-100"}`}>
               Battle
+            </Link>
+            <Link href="/leaderboard" onClick={() => setOpen(false)} className={`rounded-lg px-3 py-2.5 text-sm font-medium ${isActive("/leaderboard") ? "bg-violet-50 text-violet-700" : "text-slate-700 hover:bg-slate-100"}`}>
+              Leaderboard
             </Link>
             {user ? (
               <>
