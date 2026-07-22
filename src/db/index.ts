@@ -16,9 +16,24 @@ const globalForDb = globalThis as typeof globalThis & {
   __sciolyLastCleanup?: number;
 };
 
+/**
+ * Hosted Postgres (Neon, Supabase, Render, etc.) requires SSL. node-postgres
+ * does NOT auto-enable SSL from `sslmode=require` in the connection string, so
+ * we enable it explicitly when the URL points at a known hosted provider.
+ * (Local dev Postgres has SSL off, so we leave it disabled there.)
+ */
+const useSsl = /neon\.tech|sslmode=require|supabase\.co|\.render\.com|aiven|\.elephantsql\.com|\.fly\.dev/i.test(
+  databaseUrl,
+);
+
 let pool: Pool | null = null;
 if (databaseUrl) {
-  pool = globalForDb.__sciolyPool ?? new Pool({ connectionString: databaseUrl });
+  pool =
+    globalForDb.__sciolyPool ??
+    new Pool({
+      connectionString: databaseUrl,
+      ...(useSsl ? { ssl: { rejectUnauthorized: false } } : {}),
+    });
   if (process.env.NODE_ENV !== "production") {
     globalForDb.__sciolyPool = pool;
   }

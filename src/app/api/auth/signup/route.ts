@@ -17,11 +17,17 @@ export async function POST(req: NextRequest) {
   if (userErr) return Response.json({ error: userErr }, { status: 400 });
   const passErr = validatePassword(password);
   if (passErr) return Response.json({ error: passErr }, { status: 400 });
-  await ensureSchema();
-  const [existing] = await db.select({ id: users.id }).from(users).where(eq(users.username, username)).limit(1);
-  if (existing) return Response.json({ error: "That username is taken." }, { status: 409 });
-  const passwordHash = await hashPassword(password);
-  const [user] = await db.insert(users).values({ username, passwordHash, emoji, rating: 1000 }).returning();
-  const token = await createSession(user.id);
-  return Response.json({ user: toPublicUser(user) }, { status: 201, headers: { "set-cookie": sessionCookieHeader(token) } });
+  try {
+    await ensureSchema();
+    const [existing] = await db.select({ id: users.id }).from(users).where(eq(users.username, username)).limit(1);
+    if (existing) return Response.json({ error: "That username is taken." }, { status: 409 });
+    const passwordHash = await hashPassword(password);
+    const [user] = await db.insert(users).values({ username, passwordHash, emoji, rating: 1000 }).returning();
+    const token = await createSession(user.id);
+    return Response.json({ user: toPublicUser(user) }, { status: 201, headers: { "set-cookie": sessionCookieHeader(token) } });
+  } catch (err) {
+    console.error("[signup] failed:", err);
+    const msg = err instanceof Error ? err.message : "Database error.";
+    return Response.json({ error: `Couldn't create your account: ${msg}` }, { status: 500 });
+  }
 }

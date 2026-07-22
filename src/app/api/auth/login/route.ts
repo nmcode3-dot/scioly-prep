@@ -13,11 +13,17 @@ export async function POST(req: NextRequest) {
   const username = typeof body.username === "string" ? body.username.trim() : "";
   const password = typeof body.password === "string" ? body.password : "";
   if (!username || !password) return Response.json({ error: "Enter your username and password." }, { status: 400 });
-  await ensureSchema();
-  const [user] = await db.select().from(users).where(eq(users.username, username)).limit(1);
-  if (!user || !(await verifyPassword(password, user.passwordHash))) {
-    return Response.json({ error: "Incorrect username or password." }, { status: 401 });
+  try {
+    await ensureSchema();
+    const [user] = await db.select().from(users).where(eq(users.username, username)).limit(1);
+    if (!user || !(await verifyPassword(password, user.passwordHash))) {
+      return Response.json({ error: "Incorrect username or password." }, { status: 401 });
+    }
+    const token = await createSession(user.id);
+    return Response.json({ user: toPublicUser(user) }, { headers: { "set-cookie": sessionCookieHeader(token) } });
+  } catch (err) {
+    console.error("[login] failed:", err);
+    const msg = err instanceof Error ? err.message : "Database error.";
+    return Response.json({ error: `Couldn't log in: ${msg}` }, { status: 500 });
   }
-  const token = await createSession(user.id);
-  return Response.json({ user: toPublicUser(user) }, { headers: { "set-cookie": sessionCookieHeader(token) } });
 }
