@@ -115,6 +115,22 @@ export async function ensureSchema(): Promise<void> {
       );
       CREATE INDEX IF NOT EXISTS "matches_a_idx" ON "matches" ("player_a_id");
       CREATE INDEX IF NOT EXISTS "matches_b_idx" ON "matches" ("player_b_id");
+
+      CREATE TABLE IF NOT EXISTS "match_challenges" (
+        "id" SERIAL PRIMARY KEY,
+        "from_user_id" INTEGER NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
+        "from_username" TEXT NOT NULL,
+        "from_emoji" TEXT NOT NULL,
+        "to_user_id" INTEGER NOT NULL REFERENCES "users"("id") ON DELETE CASCADE,
+        "to_username" TEXT NOT NULL,
+        "event_name" TEXT NOT NULL,
+        "division" TEXT NOT NULL,
+        "status" TEXT NOT NULL DEFAULT 'pending',
+        "match_id" INTEGER,
+        "created_at" TIMESTAMP DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS "match_challenges_to_idx" ON "match_challenges" ("to_user_id", "status");
+      CREATE INDEX IF NOT EXISTS "match_challenges_from_idx" ON "match_challenges" ("from_user_id", "status");
     `);
     globalForDb.__sciolySchemaReady = true;
   } finally {
@@ -148,6 +164,10 @@ export async function cleanupStaleData(): Promise<void> {
       String(MATCH_KEEP_MS),
     ]);
     await client.query(`DELETE FROM match_requests WHERE "created_at" < NOW() - ($1 || ' milliseconds')::interval`, [
+      String(REQUEST_KEEP_MS),
+    ]);
+    // Stale directed challenges (no accept within the window).
+    await client.query(`DELETE FROM match_challenges WHERE "created_at" < NOW() - ($1 || ' milliseconds')::interval`, [
       String(REQUEST_KEEP_MS),
     ]);
   } finally {

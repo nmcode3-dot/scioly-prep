@@ -86,4 +86,29 @@ export const matches = pgTable(
   (t) => ({ byA: index("matches_a_idx").on(t.playerAId), byB: index("matches_b_idx").on(t.playerBId) }),
 );
 
+/**
+ * A directed challenge: one player requests to fight another, who must accept.
+ * On accept, a `match` is created and both are redirected into it.
+ */
+export const matchChallenges = pgTable(
+  "match_challenges",
+  {
+    id: serial("id").primaryKey(),
+    fromUserId: integer("from_user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    fromUsername: text("from_username").notNull(),
+    fromEmoji: text("from_emoji").notNull(),
+    toUserId: integer("to_user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    toUsername: text("to_username").notNull(),
+    eventName: text("event_name").notNull(),
+    division: text("division").notNull(),
+    status: text("status").notNull().default("pending"), // pending | accepted | declined | expired
+    matchId: integer("match_id"),
+    createdAt: timestamp("created_at").defaultNow(),
+  },
+  (t) => ({
+    byTo: index("match_challenges_to_idx").on(t.toUserId, t.status),
+    byFrom: index("match_challenges_from_idx").on(t.fromUserId, t.status),
+  }),
+);
+
 export type UserRow = typeof users.$inferSelect;

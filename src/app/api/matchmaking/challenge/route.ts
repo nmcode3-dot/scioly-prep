@@ -1,15 +1,14 @@
 import { NextRequest } from "next/server";
-import { db, ensureSchema } from "@/db";
-import { matchRequests, matches } from "@/db/schema";
+import { db, ensureSchema, cleanupStaleData } from "@/db";
+import { matchRequests, matchChallenges } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
 import { getUserFromRequest, dbUnavailable } from "@/lib/auth";
-import { generateQuestions } from "@/lib/ai";
-import { BATTLE_QUESTIONS, BATTLE_SEASON } from "@/lib/battle-client";
 
 export const dynamic = "force-dynamic";
 
 // POST /api/matchmaking/challenge  { requestId }  (auth)
-// Accept someone's open challenge → create a shared human match.
+// Send a directed challenge to a player who has an open request. They must
+// ACCEPT before a match is created.
 export async function POST(req: NextRequest) {
   if (dbUnavailable()) return Response.json({ error: "Matchmaking requires a database (DATABASE_URL)." }, { status: 503 });
   const user = await getUserFromRequest(req);
@@ -21,62 +20,33 @@ export async function POST(req: NextRequest) {
   if (!Number.isFinite(requestId)) return Response.json({ error: "Invalid request." }, { status: 400 });
 
   await ensureSchema();
+  cleanupStaleData().catch(() => {});
 
-  const [open] = await db
+  const [host] = await db
     .select()
     .from(matchRequests)
     .where(and(eq(matchRequests.id, requestId), eq(matchRequests.status, "open")))
     .limit(1);
-  if (!open) return Response.json({ error: "That challenge was already taken or cancelled." }, { status: 409 });
-  if (open.userId === user.id) return Response.json({ error: "You can't accept your own challenge." }, { status: 400 });
+  if (!host) return Response.json({ error: "That player is no longer available." }, { status: 409 });
+  if (host.userId === user.id) return Response.json({ error: "You can't challenge yourself." }, { status: 400 });
 
-  // Atomically claim it (status open -> matched); only one claimant wins.
-  const claimed = await db.transaction(async (tx) => {
-    const [row] = await tx
-      .update(matchRequests)
-      .set({ status: "matched" })
-      .where(and(eq(matchRequests.id, requestId), eq(matchRequests.status, "open")))
-      .returning();
-    return row;
-  });
-  if (!claimed) return Response.json({ error: "That challenge was already taken." }, { status: 409 });
-
-  // Generate shared questions (current-season rules).
-  let questions;
-  try {
-    const { questions: ai } = await generateQuestions({
-      eventName: open.eventName,
-      division: open.division,
-      difficulty: "medium",
-      count: BATTLE_QUESTIONS,
-      season: BATTLE_SEASON,
-    });
-    questions = ai.map((q) => ({ prompt: q.prompt, options: q.options, correctIndex: q.correctIndex, explanation: q.explanation, topic: q.topic }));
-  } catch {
-    return Response.json({ error: "Couldn't generate questions. Try again." }, { status: 502 });
-  }
-
-  const [match] = await db
-    .insert(matches)
+  // Replace any pending outgoing challenge of mine.
+  await db.delete(matchChallenges).where(and(eq(matchChallenges.fromUserId, user.id), eq(matchChallenges.status, "pending")));
+  const [ch] = await db
+    .insert(matchChallenges)
     .values({
-      eventName: open.eventName,
-      division: open.division,
-      season: BATTLE_SEASON,
-      questions,
-      playerAId: open.userId,
-      playerAName: open.username,
-      playerAEmoji: open.emoji,
-      playerARating: open.rating,
-      playerBId: user.id,
-      playerBName: user.username,
-      playerBEmoji: user.emoji,
-      playerBRating: user.rating,
+      fromUserId: user.id,
+      fromUsername: user.username,
+      fromEmoji: user.emoji,
+      toUserId: host.userId,
+      toUsername: host.username,
+      eventName: host.eventName,
+      division: host.division,
+      status: "pending",
     })
-    .returning({ id: matches.id });
-
-  await db.update(matchRequests).set({ matchId: match.id }).where(eq(matchRequests.id, requestId));
-  // Clean up any of my own open requests.
+    .returning({ id: matchChallenges.id });
+  // I'm now busy waiting — remove my own open request if any.
   await db.delete(matchRequests).where(and(eq(matchRequests.userId, user.id), eq(matchRequests.status, "open")));
 
-  return Response.json({ matchId: match.id });
+  return Response.json({ challengeId: ch.id, toUsername: host.username, eventName: host.eventName });
 }
