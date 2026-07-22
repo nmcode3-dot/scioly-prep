@@ -14,7 +14,7 @@ export function AuthModal({
   onClose: () => void;
   initialMode?: "login" | "signup";
 }) {
-  const { refresh } = useUser();
+  const { refresh, setCurrent } = useUser();
   const [mode, setMode] = useState<"login" | "signup">(initialMode);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -48,14 +48,17 @@ export function AuthModal({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
+        credentials: "include",
       });
       const data = await res.json();
-      if (!res.ok) {
+      if (!res.ok || !data.user) {
         setError(data.error ?? "Something went wrong.");
         setBusy(false);
         return;
       }
-      await refresh();
+      // Log in immediately from the response (don't depend on a follow-up fetch).
+      setCurrent(data.user);
+      refresh();
       onClose();
     } catch {
       setError("Network error. Try again.");

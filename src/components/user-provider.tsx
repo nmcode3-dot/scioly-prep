@@ -14,6 +14,7 @@ interface UserCtx {
   user: CurrentUser | null;
   loading: boolean;
   refresh: () => Promise<void>;
+  setCurrent: (u: CurrentUser) => void;
   openAuth: (mode?: "login" | "signup") => void;
 }
 
@@ -21,6 +22,7 @@ const Ctx = createContext<UserCtx>({
   user: null,
   loading: true,
   refresh: async () => {},
+  setCurrent: () => {},
   openAuth: () => {},
 });
 
@@ -36,7 +38,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
 
   const refresh = useCallback(async () => {
     try {
-      const res = await fetch("/api/auth/me", { cache: "no-store" });
+      const res = await fetch("/api/auth/me", { cache: "no-store", credentials: "include" });
       const data = await res.json();
       setUser(data.user ?? null);
     } catch {
@@ -44,6 +46,11 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setLoading(false);
     }
+  }, []);
+
+  const setCurrent = useCallback((u: CurrentUser) => {
+    setUser(u);
+    setLoading(false);
   }, []);
 
   const openAuth = useCallback((mode: "login" | "signup" = "login") => {
@@ -59,7 +66,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   }, [refresh]);
 
   return (
-    <Ctx.Provider value={{ user, loading, refresh, openAuth }}>
+    <Ctx.Provider value={{ user, loading, refresh, setCurrent, openAuth }}>
       {children}
       <AuthModal open={authOpen} onClose={() => setAuthOpen(false)} key={authMode} initialMode={authMode} />
     </Ctx.Provider>

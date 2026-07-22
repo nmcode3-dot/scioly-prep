@@ -95,7 +95,8 @@ export function readCookie(req: Request, name: string): string | null {
 
 export function sessionCookieHeader(token: string): string {
   const maxAge = SESSION_TTL_DAYS * 24 * 60 * 60;
-  return `${SESSION_COOKIE}=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}`;
+  const secure = process.env.NODE_ENV === "production" ? "; Secure" : "";
+  return `${SESSION_COOKIE}=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}${secure}`;
 }
 
 export function clearCookieHeader(): string {
