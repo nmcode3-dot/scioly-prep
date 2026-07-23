@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useUser } from "@/components/user-provider";
+import { QuestionReporter } from "@/components/question-reporter";
 import {
   getActiveBattle,
   judge,
@@ -31,6 +32,7 @@ export default function BattleArenaPage() {
   const [elapsed, setElapsed] = useState(0);
   const [botAnswered, setBotAnswered] = useState(0);
   const [result, setResult] = useState<BattleResult | null>(null);
+  const [disregarded, setDisregarded] = useState<Set<number>>(new Set());
 
   const qStartRef = useRef<number>(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -87,12 +89,19 @@ export default function BattleArenaPage() {
 
   const finish = async () => {
     if (!battle || !user) return;
-    // Judge client-side (correctness, then time).
-    const j = judge(answers, {
+    // Disregard any questions upheld as flawed (reported by the player).
+    const keepIdx = battle.questions
+      .map((_, i) => i)
+      .filter((i) => !disregarded.has(i));
+    const questions = keepIdx.map((i) => battle.questions[i]);
+    const homeAnswers = keepIdx.map((i) => answers[i] ?? { selectedIndex: -1, timeMs: 999999 });
+    const botAnswers = keepIdx.map((i) => battle.botAnswers[i] ?? { selectedIndex: -1, timeMs: 999999 });
+    // Judge on the remaining questions (correctness, then time).
+    const j = judge(homeAnswers, {
       eventName: battle.eventName,
       division: battle.division,
       season: battle.season,
-      questions: battle.questions,
+      questions: questions.length ? questions : battle.questions,
       home: { nickname: user.username, emoji: user.emoji },
       away: {
         nickname: battle.opponent.nickname,
@@ -100,7 +109,7 @@ export default function BattleArenaPage() {
         isBot: true,
         skill: 0,
         rating: battle.opponent.rating,
-        answers: battle.botAnswers,
+        answers: questions.length ? botAnswers : battle.botAnswers,
       },
     });
     // Send the result to the server to update the account rating.
@@ -259,6 +268,16 @@ export default function BattleArenaPage() {
                   </span>
                 </div>
               )}
+              <QuestionReporter
+                question={{ prompt: q.prompt, options: q.options, correctIndex: q.correctIndex, explanation: q.explanation }}
+                onResolved={(upheld) =>
+                  setDisregarded((prev) => {
+                    const n = new Set(prev);
+                    if (upheld) n.add(current);
+                    return n;
+                  })
+                }
+              />
               <button type="button" onClick={next} className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white hover:bg-slate-800">
                 {current + 1 >= battle.questions.length ? "See results →" : "Next question →"}
               </button>

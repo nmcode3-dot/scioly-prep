@@ -321,3 +321,92 @@ export async function generateQuestions(
 
   return { questions: normalized, model };
 }
+
+/**
+ * AI arbiter: review a player's objection to a question. Returns whether the
+ * objection is valid (the question/answer is flawed) and a short verdict.
+ */
+export async function reviewQuestion(
+  opts: {
+    prompt: string;
+    options: string[];
+    correctIndex: number;
+    explanation: string;
+    reason: string;
+  },
+  overrides?: AiOverrides,
+): Promise<{ upheld: boolean; verdict: string; model: string }> {
+  const { baseUrl, apiKey, model } = aiConfig(overrides);
+  const letters = ["A", "B", "C", "D"];
+  const optionsText = opts.options
+    .map((o, i) => `${letters[i] ?? i + 1}) ${o}`)
+    .join("\n");
+  const marked = `${letters[opts.correctIndex] ?? opts.correctIndex + 1}) ${opts.options[opts.correctIndex] ?? ""}`;
+
+  const system = `You are a strict, fair Science Olympiad rules arbiter. A competitor has flagged a multiple-choice practice question as incorrect or illogical. Decide whether their objection is VALID.
+
+Rules:
+- Uphold (upheld=true) ONLY if the marked answer is factually wrong, OR the question is genuinely ambiguous/illogical such that no single answer is clearly correct, OR a different option is equally or more defensible.
+- Do NOT uphold merely because the competitor is unsure, guessed wrong, or dislikes the question — require a legitimate factual or logical flaw.
+- Verify the underlying science objectively.
+
+Return ONLY valid JSON, no markdown: {"upheld": true|false, "verdict": "one short sentence explaining the decision"}`;
+
+  const user = `Question:
+${opts.prompt}
+
+Options:
+${optionsText}
+
+Marked correct answer: ${marked}
+Official explanation: ${opts.explanation}
+
+Competitor's objection:
+${opts.reason}`;
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 45000);
+  let content = "";
+  try {
+    const res = await fetch(`${baseUrl}/v1/chat/completions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+      },
+      body: JSON.stringify({
+        model,
+        messages: [
+          { role: "system", content: system },
+          { role: "user", content: user },
+        ],
+        temperature: 0.2,
+        stream: false,
+      }),
+      signal: controller.signal,
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new Error(`Review request failed (HTTP ${res.status}). ${text.slice(0, 160)}`);
+    }
+    const data = (await res.json()) as { choices?: { message?: { content?: string } }[] };
+    content = data.choices?.[0]?.message?.content ?? "";
+  } catch (err) {
+    if (err instanceof Error && err.name === "AbortError") {
+      throw new Error("The review took too long. Try again.");
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+
+  const parsed = extractJson(content) as { upheld?: unknown; verdict?: unknown };
+  const upheld = parsed.upheld === true || parsed.upheld === "true";
+  const verdict =
+    typeof parsed.verdict === "string" && parsed.verdict.trim()
+      ? parsed.verdict.trim()
+      : upheld
+        ? "The question has been flagged as flawed."
+        : "The question is correct as marked.";
+  return { upheld, verdict, model };
+}
