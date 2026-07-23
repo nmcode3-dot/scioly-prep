@@ -16,9 +16,12 @@ interface ReportQuestion {
  */
 export function QuestionReporter({
   question,
+  matchReport,
   onResolved,
 }: {
-  question: ReportQuestion;
+  question?: ReportQuestion;
+  /** If set, review against the question stored in this match (human matches). */
+  matchReport?: { matchId: number; questionIndex: number };
   onResolved: (upheld: boolean) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -32,16 +35,19 @@ export function QuestionReporter({
     setLoading(true);
     setError(null);
     try {
+      const payload = matchReport
+        ? { matchId: matchReport.matchId, questionIndex: matchReport.questionIndex, reason: reason.trim() }
+        : {
+            prompt: question!.prompt,
+            options: question!.options,
+            correctIndex: question!.correctIndex,
+            explanation: question!.explanation,
+            reason: reason.trim(),
+          };
       const res = await fetch("/api/question/review", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          prompt: question.prompt,
-          options: question.options,
-          correctIndex: question.correctIndex,
-          explanation: question.explanation,
-          reason: reason.trim(),
-        }),
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Review failed.");

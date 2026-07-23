@@ -108,6 +108,8 @@ export async function ensureSchema(): Promise<void> {
         "player_b_rating" INTEGER NOT NULL,
         "answers_a" JSONB,
         "answers_b" JSONB,
+        "disregard_a" JSONB,
+        "disregard_b" JSONB,
         "submitted_a" BOOLEAN NOT NULL DEFAULT FALSE,
         "submitted_b" BOOLEAN NOT NULL DEFAULT FALSE,
         "status" TEXT NOT NULL DEFAULT 'active',
@@ -115,6 +117,9 @@ export async function ensureSchema(): Promise<void> {
       );
       CREATE INDEX IF NOT EXISTS "matches_a_idx" ON "matches" ("player_a_id");
       CREATE INDEX IF NOT EXISTS "matches_b_idx" ON "matches" ("player_b_id");
+      -- Evolve existing tables: add disregard columns if missing.
+      ALTER TABLE "matches" ADD COLUMN IF NOT EXISTS "disregard_a" JSONB;
+      ALTER TABLE "matches" ADD COLUMN IF NOT EXISTS "disregard_b" JSONB;
 
       CREATE TABLE IF NOT EXISTS "match_challenges" (
         "id" SERIAL PRIMARY KEY,

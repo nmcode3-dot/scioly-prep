@@ -37,10 +37,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const timeMs = a && typeof a.timeMs === "number" && a.timeMs > 0 ? Math.round(a.timeMs) : 999999;
     return { selectedIndex, timeMs };
   });
+  // Indices this player reported + got upheld (disregarded from scoring).
+  const disregard = Array.isArray(body.disregard)
+    ? body.disregard.filter((x) => typeof x === "number").map((x) => Math.round(x as number))
+    : [];
 
   await db
     .update(matches)
-    .set(iAmA ? { answersA: answers, submittedA: true } : { answersB: answers, submittedB: true })
+    .set(iAmA ? { answersA: answers, disregardA: disregard, submittedA: true } : { answersB: answers, disregardB: disregard, submittedB: true })
     .where(eq(matches.id, matchId));
 
   // Reload to check both submitted.
@@ -49,13 +53,22 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return Response.json({ finished: false });
   }
 
-  // Both done → judge + update both ratings.
+  // Both done → judge + update both ratings, disregarding any upheld reports.
   const answersA = (m2.answersA ?? []) as unknown as BattleAnswer[];
   const answersB = (m2.answersB ?? []) as unknown as BattleAnswer[];
-  const j = judge(answersA, {
-    eventName: m2.eventName, division: m2.division, season: m2.season, questions,
+  const disregarded = new Set<number>([
+    ...((m2.disregardA as unknown as number[] | null) ?? []),
+    ...((m2.disregardB as unknown as number[] | null) ?? []),
+  ]);
+  const keepIdx = questions.map((_, i) => i).filter((i) => !disregarded.has(i));
+  const scoredQuestions = keepIdx.length ? keepIdx.map((i) => questions[i]) : questions;
+  const scoredA = (keepIdx.length ? keepIdx.map((i) => answersA[i]) : answersA) ?? [];
+  const scoredB = (keepIdx.length ? keepIdx.map((i) => answersB[i]) : answersB) ?? [];
+
+  const j = judge(scoredA, {
+    eventName: m2.eventName, division: m2.division, season: m2.season, questions: scoredQuestions,
     home: { nickname: m2.playerAName, emoji: m2.playerAEmoji },
-    away: { nickname: m2.playerBName, emoji: m2.playerBEmoji, isBot: false, skill: 0, rating: m2.playerBRating, answers: answersB },
+    away: { nickname: m2.playerBName, emoji: m2.playerBEmoji, isBot: false, skill: 0, rating: m2.playerBRating, answers: scoredB },
   });
 
   const changeA = applyRating(m2.playerARating, m2.playerBRating, j);

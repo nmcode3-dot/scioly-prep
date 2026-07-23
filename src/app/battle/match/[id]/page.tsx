@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useUser } from "@/components/user-provider";
+import { QuestionReporter } from "@/components/question-reporter";
 import { formatMs, type BattleAnswer, type Judgment } from "@/lib/battle-client";
 import { divisionShort } from "@/lib/ui";
 
@@ -37,6 +38,7 @@ export default function MatchArenaPage({ params }: { params: Promise<{ id: strin
   const [current, setCurrent] = useState(0);
   const [answers, setAnswers] = useState<(number | null)[]>([]);
   const [times, setTimes] = useState<number[]>([]);
+  const [disregarded, setDisregarded] = useState<Set<number>>(new Set());
   const [submitting, setSubmitting] = useState(false);
   const qStart = useRef<number>(0);
 
@@ -102,7 +104,7 @@ export default function MatchArenaPage({ params }: { params: Promise<{ id: strin
       const res = await fetch(`/api/match/${matchId}/submit`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ answers: payload }),
+        body: JSON.stringify({ answers: payload, disregard: Array.from(disregarded) }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Submit failed.");
@@ -249,6 +251,18 @@ export default function MatchArenaPage({ params }: { params: Promise<{ id: strin
               );
             })}
           </div>
+          {answered && (
+            <QuestionReporter
+              matchReport={{ matchId: Number(matchId), questionIndex: current }}
+              onResolved={(upheld) =>
+                setDisregarded((prev) => {
+                  const n = new Set(prev);
+                  if (upheld) n.add(current);
+                  return n;
+                })
+              }
+            />
+          )}
           <button type="button" onClick={goNext} disabled={!answered || submitting} className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50">
             {submitting ? "Submitting…" : current + 1 >= match.questions.length ? "Submit answers →" : "Next question →"}
           </button>

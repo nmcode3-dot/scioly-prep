@@ -78,6 +78,8 @@ export const matches = pgTable(
     playerBRating: integer("player_b_rating").notNull(),
     answersA: jsonb("answers_a"),
     answersB: jsonb("answers_b"),
+    disregardA: jsonb("disregard_a"),
+    disregardB: jsonb("disregard_b"),
     submittedA: boolean("submitted_a").notNull().default(false),
     submittedB: boolean("submitted_b").notNull().default(false),
     status: text("status").notNull().default("active"), // active | finished
