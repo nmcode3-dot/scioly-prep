@@ -26,6 +26,9 @@ export const metadata: Metadata = {
   },
   description:
     "Head-to-head Science Olympiad battles. Pick an event, challenge a ranked opponent, duel best-of-five on the current season's rules, and climb the rating ladder.",
+  verification: {
+    google: "uNemdJF-Wr3ohHJ-LlwwCTJauHW2e9rhYx_oZAAV8HU",
+  },
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
